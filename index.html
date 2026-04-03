@@ -1,0 +1,93 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Diário de viagens</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+  <div id="sidebar">
+    <h2>&#127757; Jornal de viagens</h2>
+
+    <button id="visitedOverlayToggle" class="overlay-pill" type="button" aria-pressed="false" title="Visualizar países visitados">
+      <span class="overlay-pill-icon">&#128065;</span>
+      <span class="overlay-pill-label">Visualizar</span>
+    </button>
+
+    <span id="visitedOverlayStatus" class="sr-only" aria-live="polite"></span>
+
+    <div class="tab-row">
+      <button id="tripsTabBtn" class="tab-btn active" type="button">Viagens</button>
+      <button id="citiesTabBtn" class="tab-btn" type="button">Cidades</button>
+    </div>
+
+    <section id="tripsTab" class="tab-panel active">
+      <p id="tripMode" class="trip-mode">Criando uma nova viagem</p>
+
+      <input id="tripName" placeholder="Nome da viagem" />
+
+      <div class="form-row">
+        <label class="field">
+          <span>Mês/ano</span>
+          <input id="tripMonth" type="month" />
+        </label>
+
+        <label class="field">
+          <span>Status</span>
+          <select id="tripStatus">
+            <option value="planned">Planejado</option>
+            <option value="completed">Concluído</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="action-row">
+        <button id="newTrip" class="btn secondary">Nova viagem</button>
+        <button id="saveTrip" class="btn primary">Salvar</button>
+        <button id="clearGraph" class="btn danger">Limpar</button>
+      </div>
+
+      <div class="geojson-tools">
+        <button id="importCountriesBtn" class="btn secondary" type="button">Importar paises</button>
+        <input id="countriesFileInput" type="file" accept=".geojson,application/geo+json,application/json" hidden />
+        <small id="countriesFileStatus">Usando busca online para identificar paises</small>
+      </div>
+
+      <p id="distance">Distância total: 0 km</p>
+
+      <label class="field">
+        <span>Ordenar viagens</span>
+        <select id="tripSort">
+          <option value="date-desc">Mais recentes</option>
+          <option value="date-asc">Mais antigas</option>
+          <option value="name-asc">Nome (A-Z)</option>
+          <option value="status">Status</option>
+        </select>
+      </label>
+
+      <ul id="tripList"></ul>
+    </section>
+
+    <section id="citiesTab" class="tab-panel">
+      <section class="city-section">
+        <div class="section-header">
+          <h3>Cidades visitadas</h3>
+          <small id="cityListStatus">Use viagens concluídas para montar a lista</small>
+        </div>
+
+        <div id="cityList" class="city-list"></div>
+      </section>
+    </section>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-editable@1.2.0/src/Leaflet.Editable.js"></script>
+  <script type="module" src="/main.js"></script>
+
+</body>
+</html>

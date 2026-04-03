@@ -1,0 +1,542 @@
+﻿body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  display: flex;
+  height: 100vh;
+  background: #f3f4f6;
+}
+
+#sidebar {
+  width: 420px;
+  background: white;
+  padding: 20px;
+  box-shadow: 4px 0 20px rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100vh;
+  box-sizing: border-box;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.tab-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.tab-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: #e5e7eb;
+  color: #334155;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.tab-btn.active {
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+  color: white;
+}
+
+.tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tab-panel.active {
+  display: flex;
+}
+
+.trip-mode {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.field span {
+  font-weight: 600;
+}
+
+.overlay-pill {
+  align-self: flex-start;
+  border: none;
+  border-radius: 999px;
+  padding: 9px 14px;
+  background: #e2e8f0;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.overlay-pill.active {
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+  color: white;
+}
+
+.overlay-pill-icon {
+  font-size: 14px;
+}
+
+.overlay-pill-label {
+  font-size: 13px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.city-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 6px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.section-header h3 {
+  margin: 0;
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.section-header small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.city-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+
+.country-group {
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.country-toggle {
+  width: 100%;
+  border: none;
+  background: #f8fafc;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.country-toggle:hover {
+  background: #f1f5f9;
+}
+
+.country-toggle-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.country-toggle-label {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.country-toggle-count {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.country-toggle-chevron {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.country-cities {
+  display: none;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.country-cities.open {
+  display: grid;
+  gap: 8px;
+}
+
+.city-card {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.city-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.city-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.city-toggle-btn {
+  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #475569;
+  cursor: pointer;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.city-toggle-btn.active {
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+  color: white;
+}
+
+.city-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.city-badge {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.city-name-block {
+  min-width: 0;
+}
+
+.city-name {
+  display: block;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.city-country {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.city-ratings {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.city-rename {
+  display: none;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.city-rename.open {
+  display: grid;
+}
+
+.city-rename input {
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 9px 10px;
+  font: inherit;
+  background: white;
+  color: #111827;
+}
+
+.city-rename input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.rating-row {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.rating-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.star-group {
+  display: inline-flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.star-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  color: #cbd5e1;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.star-btn.active {
+  color: #f59e0b;
+}
+
+.icon-btn {
+  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+  cursor: pointer;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.icon-btn:hover {
+  background: #bae6fd;
+}
+
+.city-empty {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.field input,
+.field select,
+#tripName {
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  background: white;
+  color: #111827;
+}
+
+.field input:focus,
+.field select:focus,
+#tripName:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.geojson-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.geojson-tools small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+#map {
+  flex: 1;
+}
+
+.btn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  color: white;
+}
+
+.btn.secondary {
+  background: #e5e7eb;
+}
+
+.btn.danger {
+  background: #ef4444;
+  color: white;
+}
+
+.trip-card {
+  padding: 10px;
+  border-radius: 10px;
+  background: #f9fafb;
+  cursor: pointer;
+}
+
+.trip-card:hover {
+  background: #eef2ff;
+}
+
+.trip-active {
+  background: #e0e7ff;
+}
+
+.trip-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.trip-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: #4b5563;
+}
+
+.trip-submeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: #6b7280;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-planned {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-completed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+#distance {
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.flag-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.flag-list.empty {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.flag-icon {
+  width: 18px;
+  height: 13px;
+  object-fit: cover;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+.flag-icon.tiny {
+  width: 16px;
+  height: 12px;
+}
+
+#tripList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
