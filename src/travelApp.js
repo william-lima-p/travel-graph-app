@@ -443,11 +443,13 @@ export async function startApp() {
   function updateTripMode() {
     if (selectedTripIndex === null) {
       dom.tripModeEl.textContent = 'Criando uma nova viagem';
+      dom.tripHelpEl.textContent = 'Clique no mapa para adicionar pontos. Use o botao direito em um ponto para excluir.';
       return;
     }
 
     const trip = trips[selectedTripIndex];
     dom.tripModeEl.textContent = `Editando: ${trip?.name || 'viagem atual'}`;
+    dom.tripHelpEl.textContent = 'Arraste os pontos para ajustar a rota. Use o botao direito em um ponto para excluir.';
   }
 
   async function ensureCityDetails(city) {
@@ -1030,6 +1032,7 @@ function getDomRefs() {
     cityListStatusEl: document.getElementById('cityListStatus'),
     tripSortInput: document.getElementById('tripSort'),
     tripModeEl: document.getElementById('tripMode'),
+    tripHelpEl: document.getElementById('tripHelp'),
     newTripBtn: document.getElementById('newTrip'),
     saveTripBtn: document.getElementById('saveTrip'),
     clearGraphBtn: document.getElementById('clearGraph'),
