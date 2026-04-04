@@ -73,6 +73,10 @@ export function getCountryLabelFromCode(code) {
   return regionNamesInPortuguese?.of(code) || regionNamesInEnglish?.of(code) || code;
 }
 
+export function getCountryEnglishLabelFromCode(code) {
+  return regionNamesInEnglish?.of(code) || code;
+}
+
 export function getTripCountryCodes(trip) {
   const codes = [];
   const seen = new Set();

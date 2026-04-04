@@ -6,6 +6,7 @@ import {
   escapeHtml,
   formatTripMonth,
   getCountryDisplayLabel,
+  getCountryEnglishLabelFromCode,
   getCountryLabelFromCode,
   getDisplayCityName,
   getDisplayVisitedCityName,
@@ -69,6 +70,8 @@ export async function startApp() {
   let activeTab = 'trips';
   let worldGeoJsonCache = initialData.countriesGeoJson || null;
   let pendingSaveCount = 0;
+  let deferredPersistTimer = null;
+  let mapOverlayLoadCount = 0;
 
   const locationService = createLocationService({
     loadWorldGeoJson,
@@ -257,9 +260,15 @@ export async function startApp() {
       const flagMarkup = getFlagMarkup(getTripCountryCodes(trip));
       const dateLabel = formatTripMonth(trip.month);
       const statusLabel = trip.status === 'completed' ? 'Concluido' : 'Planejado';
+      const tripRating = getTripAverageRating(trip);
+      const isExpanded = index === selectedTripIndex;
+      const tripCitiesMarkup = isExpanded ? renderTripCitiesSummaryMarkup(trip) : '';
+      const tripRatingMarkup = trip.status === 'completed'
+        ? `<span class="trip-rating">${tripRating ? `Media ${tripRating.toFixed(1)} ★` : 'Sem notas'}</span>`
+        : '';
 
       li.innerHTML = `
-        <div class="trip-card ${index === selectedTripIndex ? 'trip-active' : ''}">
+        <div class="trip-card ${isExpanded ? 'trip-active trip-expanded' : ''}">
           <div class="trip-card-header">
             <div>
               <strong>${escapeHtml(trip.name)}</strong><br>
@@ -269,12 +278,13 @@ export async function startApp() {
               </small>
               <br>
               <small class="trip-meta">
-                <span>${(trip.distance || 0).toFixed(1)} km</span>
+                ${tripRatingMarkup}
                 ${flagMarkup}
               </small>
             </div>
             <button class="btn danger deleteBtn" type="button" aria-label="Excluir viagem">&#128465;</button>
           </div>
+          ${tripCitiesMarkup}
         </div>
       `;
 
@@ -529,6 +539,10 @@ export async function startApp() {
   }
 
   async function refreshVisitedCountriesLayer() {
+    mapOverlayLoadCount += 1;
+    syncMapOverlayLoading();
+
+    try {
     if (!visitedOverlayEnabled) {
       if (visitedCountriesLayer) {
         map.removeLayer(visitedCountriesLayer);
@@ -540,7 +554,7 @@ export async function startApp() {
 
     const visitedCodes = getVisitedCountryCodes();
     const visitedNames = getVisitedCountryNames();
-    if (!visitedCodes.size) {
+    if (!visitedCodes.size && !visitedNames.size) {
       if (visitedCountriesLayer) {
         map.removeLayer(visitedCountriesLayer);
         visitedCountriesLayer = null;
@@ -549,7 +563,7 @@ export async function startApp() {
       return;
     }
 
-    setVisitedOverlayStatus(`Carregando ${visitedCodes.size} pais(es)...`);
+    setVisitedOverlayStatus(`Carregando ${Math.max(visitedCodes.size, visitedNames.size)} pais(es)...`);
     const geoJson = await loadWorldGeoJson();
     if (!geoJson) {
       setVisitedOverlayStatus('Nao foi possivel carregar os contornos dos paises');
@@ -581,32 +595,41 @@ export async function startApp() {
     }).addTo(map);
 
     if (!matchedCountries.size) {
-      setVisitedOverlayStatus(`Nenhum poligono encontrado para ${visitedCodes.size} pais(es)`);
+      setVisitedOverlayStatus(`Nenhum poligono encontrado para ${Math.max(visitedCodes.size, visitedNames.size)} pais(es)`);
       return;
     }
 
     setVisitedOverlayStatus(`${matchedCountries.size} pais(es) destacados no mapa`);
+    } finally {
+      mapOverlayLoadCount = Math.max(0, mapOverlayLoadCount - 1);
+      syncMapOverlayLoading();
+    }
   }
 
   function getVisitedCountryCodes() {
     const codes = new Set();
-    trips.forEach((trip) => {
+    trips
+      .filter((trip) => trip.status === 'completed')
+      .forEach((trip) => {
       getTripCountryCodes(trip).forEach((code) => codes.add(normalizeOverlayCountryCode(code)));
-    });
+      });
+
     return codes;
   }
 
   function getVisitedCountryNames() {
     const names = new Set();
 
-    trips.forEach((trip) => {
-      (trip.cities || []).forEach((city) => {
-        const canonicalName = getCanonicalCountryName(city);
-        if (canonicalName) {
-          names.add(canonicalName);
-        }
+    trips
+      .filter((trip) => trip.status === 'completed')
+      .forEach((trip) => {
+        (trip.cities || []).forEach((city) => {
+          const canonicalName = getCanonicalCountryName(city);
+          if (canonicalName) {
+            names.add(canonicalName);
+          }
+        });
       });
-    });
 
     return names;
   }
@@ -685,8 +708,8 @@ export async function startApp() {
 
       wrapper.querySelector('.country-toggle').onclick = async () => {
         collapsedCountries[countryGroup.key] = !isCollapsed;
-        await persistAppData('Preferencia da lista de cidades salva em data/app-data.json');
         renderVisitedCitiesList();
+        schedulePersistAppData('Preferencia da lista de cidades salva em data/app-data.json');
       };
 
       const countryCitiesEl = wrapper.querySelector('.country-cities');
@@ -740,8 +763,8 @@ export async function startApp() {
           const nextRatings = { ...getCityRatings(visitedCity.id) };
           nextRatings.isCity = nextRatings.isCity === false;
           cityRatings[visitedCity.id] = normalizeRatings(nextRatings);
-          await persistAppData('Avaliacao de cidade salva em data/app-data.json');
           renderVisitedCitiesList();
+          schedulePersistAppData('Avaliacao de cidade salva em data/app-data.json');
         };
 
         card.querySelectorAll('.star-btn').forEach((button) => {
@@ -751,8 +774,8 @@ export async function startApp() {
             const nextRatings = { ...getCityRatings(visitedCity.id) };
             nextRatings[category] = nextRatings[category] === value ? 0 : value;
             cityRatings[visitedCity.id] = normalizeRatings(nextRatings);
-            await persistAppData('Avaliacao de cidade salva em data/app-data.json');
             renderVisitedCitiesList();
+            schedulePersistAppData('Avaliacao de cidade salva em data/app-data.json');
           };
         });
 
@@ -768,8 +791,8 @@ export async function startApp() {
           const nextRatings = { ...getCityRatings(visitedCity.id) };
           nextRatings.customName = customName;
           cityRatings[visitedCity.id] = normalizeRatings(nextRatings);
-          await persistAppData('Nome personalizado salvo em data/app-data.json');
           renderVisitedCitiesList();
+          schedulePersistAppData('Nome personalizado salvo em data/app-data.json');
         };
 
         card.querySelector('.cancel-city-name-btn').onclick = () => {
@@ -834,6 +857,10 @@ export async function startApp() {
         return true;
       }
 
+      if (groupName || cityName) {
+        return false;
+      }
+
       return distance <= CITY_PROXIMITY_KM;
     }) || null;
   }
@@ -874,6 +901,146 @@ export async function startApp() {
 
   function getCityRatings(cityId) {
     return normalizeRatings(cityRatings[cityId]);
+  }
+
+  function getTripAverageRating(trip) {
+    const cityScores = (trip.cities || [])
+      .map((city) => getCityScore(createVisitedCityId(city)))
+      .filter((score) => score > 0);
+
+    if (!cityScores.length) {
+      return null;
+    }
+
+    const total = cityScores.reduce((sum, score) => sum + score, 0);
+    return total / cityScores.length;
+  }
+
+  function renderTripCitiesSummaryMarkup(trip) {
+    const items = buildTripCitySummaries(trip).map((citySummary) => {
+      const scoreLabel = citySummary.score > 0 ? `${citySummary.score.toFixed(1)} ★` : 'Sem nota';
+      const countLabel = citySummary.count > 1 ? `<span class="trip-city-count">${citySummary.count}x</span>` : '';
+
+      return `
+        <li class="trip-city-item">
+          <span class="trip-city-name">${escapeHtml(citySummary.label)}</span>
+          <span class="trip-city-score">${scoreLabel}</span>
+          ${countLabel}
+        </li>
+      `;
+    }).join('');
+
+    if (!items) {
+      return '<div class="trip-city-panel"><div class="trip-city-empty">Nenhum ponto nesta viagem.</div></div>';
+    }
+
+    return `
+      <div class="trip-city-panel">
+        <div class="trip-city-panel-title">Cidades da viagem</div>
+        <ul class="trip-city-list">${items}</ul>
+      </div>
+    `;
+  }
+
+  function buildTripCitySummaries(trip) {
+    const summaries = [];
+
+    (trip.cities || []).forEach((city, index) => {
+      const cityId = createVisitedCityId(city);
+      const ratings = getCityRatings(cityId);
+      const customName = ratings.customName?.trim();
+      const baseLabel = customName || city.cityName || city.regionName || `Ponto ${index + 1}`;
+      const normalizedLabel = normalizeCountryName(baseLabel);
+      const countryCode = city.countryCode?.toLowerCase() || '';
+      const score = getCityScore(cityId);
+
+      const existing = summaries.find((summary) => {
+        if (summary.countryCode !== countryCode) {
+          return false;
+        }
+
+        if (summary.normalizedLabel && normalizedLabel) {
+          return summary.normalizedLabel === normalizedLabel;
+        }
+
+        const distance = distanceBetweenPointsKm(summary.lat, summary.lng, city.lat, city.lng);
+        return distance <= 2;
+      });
+
+      if (existing) {
+        existing.count += 1;
+        if (score > existing.score) {
+          existing.score = score;
+        }
+        if (!existing.customName && customName) {
+          existing.label = customName;
+          existing.customName = true;
+          existing.normalizedLabel = normalizeCountryName(customName);
+        }
+        return;
+      }
+
+      summaries.push({
+        label: baseLabel,
+        normalizedLabel,
+        countryCode,
+        lat: city.lat,
+        lng: city.lng,
+        score,
+        count: 1,
+        customName: Boolean(customName)
+      });
+    });
+
+    return summaries;
+  }
+
+  function renderTripCitiesMarkup(trip) {
+    const items = (trip.cities || []).map((city, index) => {
+      const cityLabel = city.cityName || city.regionName || `Ponto ${index + 1}`;
+      const score = getCityScore(createVisitedCityId(city));
+      const scoreLabel = score > 0 ? `${score.toFixed(1)} ★` : 'Sem nota';
+
+      return `
+        <li class="trip-city-item">
+          <span class="trip-city-name">${escapeHtml(cityLabel)}</span>
+          <span class="trip-city-score">${scoreLabel}</span>
+        </li>
+      `;
+    }).join('');
+
+    if (!items) {
+      return '<div class="trip-city-panel"><div class="trip-city-empty">Nenhum ponto nesta viagem.</div></div>';
+    }
+
+    return `
+      <div class="trip-city-panel">
+        <div class="trip-city-panel-title">Cidades da viagem</div>
+        <ul class="trip-city-list">${items}</ul>
+      </div>
+    `;
+  }
+
+  function getCityScore(cityId) {
+    const ratings = getCityRatings(cityId);
+
+    if (ratings.isCity === false) {
+      return ratings.overall || 0;
+    }
+
+    const values = [
+      ratings.cuisine,
+      ratings.museums,
+      ratings.monuments,
+      ratings.walkable
+    ].filter((value) => value > 0);
+
+    if (!values.length) {
+      return 0;
+    }
+
+    const total = values.reduce((sum, value) => sum + value, 0);
+    return total / values.length;
   }
 
   function setActiveTab(tab) {
@@ -926,7 +1093,7 @@ export async function startApp() {
   function getCanonicalCountryName(city) {
     const code = city.countryCode ? normalizeOverlayCountryCode(city.countryCode) : null;
     if (code) {
-      const label = getCountryLabelFromCode(code);
+      const label = getCountryEnglishLabelFromCode(code);
       if (label) {
         return normalizeCountryName(label);
       }
@@ -948,6 +1115,10 @@ export async function startApp() {
     dom.appDataStatusEl.textContent = message;
   }
 
+  function syncMapOverlayLoading() {
+    dom.mapLoadingOverlayEl.classList.toggle('active', mapOverlayLoadCount > 0);
+  }
+
   function snapshotAppData() {
     return createSerializableAppData({
       trips,
@@ -959,7 +1130,23 @@ export async function startApp() {
     });
   }
 
+  function schedulePersistAppData(successMessage, delayMs = 250) {
+    if (deferredPersistTimer) {
+      clearTimeout(deferredPersistTimer);
+    }
+
+    deferredPersistTimer = window.setTimeout(() => {
+      deferredPersistTimer = null;
+      void persistAppData(successMessage);
+    }, delayMs);
+  }
+
   async function persistAppData(successMessage) {
+    if (deferredPersistTimer) {
+      clearTimeout(deferredPersistTimer);
+      deferredPersistTimer = null;
+    }
+
     pendingSaveCount += 1;
     syncSavingIndicator();
 
@@ -1048,6 +1235,7 @@ function getDomRefs() {
     importDataBtn: document.getElementById('importDataBtn'),
     exportDataBtn: document.getElementById('exportDataBtn'),
     appDataFileInput: document.getElementById('appDataFileInput'),
-    appDataStatusEl: document.getElementById('appDataStatus')
+    appDataStatusEl: document.getElementById('appDataStatus'),
+    mapLoadingOverlayEl: document.getElementById('mapLoadingOverlay')
   };
 }
