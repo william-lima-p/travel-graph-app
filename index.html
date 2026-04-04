@@ -56,7 +56,14 @@
         <small id="countriesFileStatus">Usando busca online para identificar paises</small>
       </div>
 
-      <p id="distance">Distância total: 0 km</p>
+      <div class="data-tools">
+        <div class="action-row">
+          <button id="importDataBtn" class="btn secondary" type="button">Importar dados</button>
+          <button id="exportDataBtn" class="btn secondary" type="button">Baixar dados</button>
+        </div>
+        <input id="appDataFileInput" type="file" accept=".json,application/json" hidden />
+        <small id="appDataStatus">Dados sincronizados com data/app-data.json</small>
+      </div>
 
       <label class="field">
         <span>Ordenar viagens</span>
@@ -87,7 +94,7 @@
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-editable@1.2.0/src/Leaflet.Editable.js"></script>
-  <script type="module" src="/main.js"></script>
+  <script type="module" src="/src/main.js"></script>
 
 </body>
 </html>
