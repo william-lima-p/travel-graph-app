@@ -18,7 +18,7 @@ export function createDefaultAppData() {
     preferences: {
       tripSort: DEFAULT_TRIP_SORT,
       visitedOverlayEnabled: false,
-      theme: 'light'
+      theme: 'dark'
     },
     countriesGeoJson: null
   };

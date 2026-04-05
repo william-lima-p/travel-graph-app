@@ -14,10 +14,10 @@
       <span class="pixel-planet" aria-hidden="true">
         <svg viewBox="0 0 24 24" role="img" focusable="false">
           <circle cx="12" cy="12" r="9" fill="#38bdf8" />
-          <path d="M7 9C8.5 7.2 10.5 6.8 12 7.4C11.6 8.5 10.8 9.6 9.6 10.4C8.7 11 7.8 11.2 7 11.1Z" fill="#16a34a" />
-          <path d="M12.7 7.7C14.7 7.1 16.8 7.9 18 9.4C17.3 10.2 16.3 10.8 15 10.9C13.8 11 12.9 10.5 12.2 9.6C12.2 8.9 12.4 8.3 12.7 7.7Z" fill="#22c55e" />
-          <path d="M8.1 12.5C9.8 11.7 11.2 12 12.1 12.8C11.8 14.1 10.9 15.3 9.4 16.1C8.2 16.7 7 16.8 6.1 16.5C6.2 14.9 6.9 13.3 8.1 12.5Z" fill="#16a34a" />
-          <path d="M13.2 12.8C14.4 12.1 16.1 12.2 17.6 12.9C17.4 14.7 16.2 16.3 14.4 17C13.5 16.3 12.9 15.2 12.7 14C12.7 13.6 12.9 13.2 13.2 12.8Z" fill="#22c55e" />
+          <path d="M9 6.5C7.8 6.8 6.8 7.7 6.4 9.1C6.2 10 6.4 10.8 6.9 11.3C7.4 11.8 8.2 12 8.9 11.8C9.3 11.7 9.6 11.5 9.9 11.1C10.2 10.8 10.5 10.3 10.8 9.9C11.2 9.3 11.4 8.6 11.3 7.9C10.8 7 10 6.4 9 6.5Z" fill="#16a34a" />
+          <path d="M10.8 12.1C10 12.4 9.4 13 9 13.8C8.6 14.6 8.6 15.5 8.9 16.2C9.2 17 9.9 17.6 10.8 17.9C11.3 18.1 11.9 18.1 12.4 17.9C12.6 17.4 12.6 16.9 12.4 16.3C12.2 15.6 12.1 14.9 12.2 14.1C12.3 13.3 11.9 12.6 10.8 12.1Z" fill="#16a34a" />
+          <path d="M14.2 14.7C14.8 15 15.5 15.2 16.1 15.2C16.7 15.2 17.3 15 17.8 14.6C17.6 13.7 17 12.9 16.1 12.5C15.4 12.2 14.8 12.2 14.2 12.4C13.9 12.8 13.9 13.3 14 13.8C14 14.1 14.1 14.4 14.2 14.7Z" fill="#22c55e" />
+          <path d="M13.7 8.2C14.5 7.8 15.4 7.7 16.2 8C17 8.2 17.6 8.7 18 9.4C17.8 10 17.4 10.5 16.8 10.8C16.2 11 15.6 11 15 10.8C14.3 10.5 13.8 9.9 13.7 9.1C13.6 8.8 13.6 8.5 13.7 8.2Z" fill="#22c55e" />
           <circle cx="12" cy="12" r="9" fill="none" stroke="#0f172a" stroke-width="1.5" />
         </svg>
       </span>
@@ -44,31 +44,40 @@
     </div>
 
     <section id="tripsTab" class="tab-panel active">
-      <p id="tripMode" class="trip-mode">Criando uma nova viagem</p>
-      <p id="tripHelp" class="trip-help">Clique no mapa para adicionar pontos. Use o botao direito em um ponto para excluir.</p>
+      <section class="trip-editor">
+        <button id="tripEditorToggle" class="trip-editor-toggle" type="button" aria-expanded="false">
+          <span class="trip-editor-toggle-label">Nova viagem</span>
+          <span id="tripEditorChevron" class="trip-editor-chevron">▸</span>
+        </button>
 
-      <input id="tripName" placeholder="Nome da viagem" />
+        <div id="tripEditorBody" class="trip-editor-body">
+          <p id="tripMode" class="trip-mode">Criando uma nova viagem</p>
+          <p id="tripHelp" class="trip-help">Clique no mapa para adicionar pontos. Use o botao direito em um ponto para excluir.</p>
 
-      <div class="form-row">
-        <label class="field">
-          <span>Mês/ano</span>
-          <input id="tripMonth" type="month" />
-        </label>
+          <input id="tripName" placeholder="Nome da viagem" />
 
-        <label class="field">
-          <span>Status</span>
-          <select id="tripStatus">
-            <option value="planned">Planejado</option>
-            <option value="completed">Concluído</option>
-          </select>
-        </label>
-      </div>
+          <div class="form-row">
+            <label class="field">
+              <span>Mês/ano</span>
+              <input id="tripMonth" type="month" />
+            </label>
 
-      <div class="action-row">
-        <button id="newTrip" class="btn secondary">Nova viagem</button>
-        <button id="saveTrip" class="btn primary">Salvar</button>
-        <button id="clearGraph" class="btn danger">Limpar</button>
-      </div>
+            <label class="field">
+              <span>Status</span>
+              <select id="tripStatus">
+                <option value="planned">Planejado</option>
+                <option value="completed">Concluído</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="action-row">
+            <button id="newTrip" class="btn secondary">Nova viagem</button>
+            <button id="saveTrip" class="btn primary">Salvar</button>
+            <button id="clearGraph" class="btn danger">Limpar</button>
+          </div>
+        </div>
+      </section>
 
       <div class="geojson-tools">
         <button id="importCountriesBtn" class="btn secondary" type="button">Importar paises</button>

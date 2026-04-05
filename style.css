@@ -75,6 +75,47 @@
   display: flex;
 }
 
+.trip-editor {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.trip-editor-toggle {
+  width: 100%;
+  border: none;
+  background: #f8fafc;
+  color: #0f172a;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+}
+
+.trip-editor-body {
+  display: none;
+  padding: 12px;
+  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+
+.trip-editor-body.open {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trip-editor-chevron {
+  color: #64748b;
+  font-size: 14px;
+}
+
 .trip-mode {
   margin: 0;
   padding: 8px 10px;
@@ -565,6 +606,9 @@
   height: 36px;
   border-radius: 999px;
   padding: 0;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -804,20 +848,31 @@ body[data-theme='dark'] .trip-mode {
 
 body[data-theme='dark'] .country-group,
 body[data-theme='dark'] .trip-card,
-body[data-theme='dark'] .city-card {
+body[data-theme='dark'] .city-card,
+body[data-theme='dark'] .trip-editor {
   background: #111827;
   border-color: #334155;
 }
 
 body[data-theme='dark'] .country-toggle,
 body[data-theme='dark'] .country-cities,
-body[data-theme='dark'] .city-empty {
+body[data-theme='dark'] .city-empty,
+body[data-theme='dark'] .trip-editor-toggle,
+body[data-theme='dark'] .trip-editor-body {
   background: #0b1220;
 }
 
 body[data-theme='dark'] .country-toggle:hover,
 body[data-theme='dark'] .trip-card:hover {
   background: #1e293b;
+}
+
+body[data-theme='dark'] .trip-editor-toggle {
+  color: #f8fafc;
+}
+
+body[data-theme='dark'] .trip-editor-body {
+  border-top-color: #334155;
 }
 
 body[data-theme='dark'] .field input,

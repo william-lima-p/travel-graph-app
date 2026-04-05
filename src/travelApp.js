@@ -78,6 +78,7 @@ export async function startApp() {
   let tripSort = initialData.preferences.tripSort || DEFAULT_TRIP_SORT;
   let visitedOverlayEnabled = Boolean(initialData.preferences.visitedOverlayEnabled);
   let theme = initialData.preferences.theme || 'light';
+  let tripEditorCollapsed = true;
   let visitedCountriesLayer = null;
   let activeTab = 'trips';
   let worldGeoJsonCache = initialData.countriesGeoJson || null;
@@ -119,14 +120,18 @@ export async function startApp() {
   dom.exportDataBtn.onclick = handleAppDataExport;
   dom.saveTripBtn.onclick = handleSaveTrip;
   dom.newTripBtn.onclick = () => {
-    startNewTrip();
+    startNewTrip({ openEditor: true });
     renderTrips();
   };
   dom.clearGraphBtn.onclick = () => {
     clearCurrentRoute();
   };
+  dom.tripEditorToggleBtn.onclick = () => {
+    setTripEditorCollapsed(!tripEditorCollapsed);
+  };
   dom.tripSortInput.value = tripSort;
   applyTheme();
+  setTripEditorCollapsed(tripEditorCollapsed);
   dom.tripSortInput.onchange = () => {
     tripSort = dom.tripSortInput.value;
     void persistAppData('Ordenacao salva em data/app-data.json');
@@ -158,7 +163,7 @@ export async function startApp() {
     await syncSelectedTripFromCities();
   });
 
-  startNewTrip();
+  startNewTrip({ openEditor: false });
   setActiveTab('trips');
   renderTrips();
   renderVisitedCitiesList();
@@ -273,6 +278,7 @@ export async function startApp() {
     if (!trip) return;
 
     selectedTripIndex = index;
+    setTripEditorCollapsed(false);
     dom.tripNameInput.value = trip.name;
     dom.tripMonthInput.value = trip.month;
     dom.tripStatusInput.value = trip.status;
@@ -319,7 +325,7 @@ export async function startApp() {
                 ${flagMarkup}
               </small>
             </div>
-            <button class="btn danger deleteBtn" type="button" aria-label="Excluir viagem">&#128465;</button>
+            <button class="btn danger deleteBtn" type="button" aria-label="Excluir viagem">×</button>
           </div>
           ${tripCitiesMarkup}
         </div>
@@ -469,8 +475,9 @@ export async function startApp() {
     }
   }
 
-  function startNewTrip() {
+  function startNewTrip({ openEditor = false } = {}) {
     selectedTripIndex = null;
+    setTripEditorCollapsed(!openEditor);
     dom.tripNameInput.value = '';
     dom.tripMonthInput.value = '';
     dom.tripStatusInput.value = 'planned';
@@ -494,12 +501,14 @@ export async function startApp() {
     if (selectedTripIndex === null) {
       dom.tripModeEl.textContent = 'Criando uma nova viagem';
       dom.tripHelpEl.textContent = 'Clique no mapa para adicionar pontos. Use o botao direito em um ponto para excluir.';
+      dom.tripEditorToggleLabelEl.textContent = 'Nova viagem';
       return;
     }
 
     const trip = trips[selectedTripIndex];
     dom.tripModeEl.textContent = `Editando: ${trip?.name || 'viagem atual'}`;
     dom.tripHelpEl.textContent = 'Arraste os pontos para ajustar a rota. Use o botao direito em um ponto para excluir.';
+    dom.tripEditorToggleLabelEl.textContent = trip?.name || 'Editar viagem';
   }
 
   async function ensureCityDetails(city) {
@@ -1214,6 +1223,13 @@ export async function startApp() {
     dom.visitedOverlayToggleBtn.setAttribute('aria-pressed', String(visitedOverlayEnabled));
   }
 
+  function setTripEditorCollapsed(collapsed) {
+    tripEditorCollapsed = collapsed;
+    dom.tripEditorToggleBtn.setAttribute('aria-expanded', String(!collapsed));
+    dom.tripEditorBodyEl.classList.toggle('open', !collapsed);
+    dom.tripEditorChevronEl.textContent = collapsed ? '▸' : '▾';
+  }
+
   function applyTheme() {
     const isDark = theme === 'dark';
     document.body.dataset.theme = isDark ? 'dark' : 'light';
@@ -1488,6 +1504,10 @@ function getDomRefs() {
     tripSortInput: document.getElementById('tripSort'),
     tripModeEl: document.getElementById('tripMode'),
     tripHelpEl: document.getElementById('tripHelp'),
+    tripEditorToggleBtn: document.getElementById('tripEditorToggle'),
+    tripEditorToggleLabelEl: document.querySelector('.trip-editor-toggle-label'),
+    tripEditorChevronEl: document.getElementById('tripEditorChevron'),
+    tripEditorBodyEl: document.getElementById('tripEditorBody'),
     newTripBtn: document.getElementById('newTrip'),
     saveTripBtn: document.getElementById('saveTrip'),
     clearGraphBtn: document.getElementById('clearGraph'),
