@@ -278,7 +278,6 @@ export async function startApp() {
     if (!trip) return;
 
     selectedTripIndex = index;
-    setTripEditorCollapsed(false);
     dom.tripNameInput.value = trip.name;
     dom.tripMonthInput.value = trip.month;
     dom.tripStatusInput.value = trip.status;
