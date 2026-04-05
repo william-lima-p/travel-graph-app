@@ -1,4 +1,4 @@
-import {
+﻿import {
   compareMonthAsc,
   compareMonthDesc,
   createVisitedCityId,
@@ -43,17 +43,28 @@ export async function startApp() {
   const initialData = normalizeAppDataShape(initialLoad.data);
 
   const map = L.map('map', { editable: true }).setView([-23.55, -46.63], 4);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  const lightTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
     subdomains: 'abcd',
     maxZoom: 19
-  }).addTo(map);
+  });
+  const darkTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd',
+    maxZoom: 19
+  });
+  lightTileLayer.addTo(map);
 
   const dom = getDomRefs();
   const pinIcon = L.divIcon({
-    html: '<div style="font-size:32px;">&#128205;</div>',
-    className: '',
-    iconSize: [32, 32],
-    iconAnchor: [16, 32]
+    html: `
+      <div class="map-pin" aria-hidden="true">
+        <svg viewBox="0 0 24 24" role="img" focusable="false">
+          <path d="M12 22L6 13.2C4.8 11.5 4 9.7 4 8.2C4 4.8 7.6 2 12 2C16.4 2 20 4.8 20 8.2C20 9.7 19.2 11.5 18 13.2L12 22Z" fill="#dc2626"/>
+        </svg>
+      </div>
+    `,
+    className: 'map-pin-wrapper',
+    iconSize: [22, 24],
+    iconAnchor: [11, 22]
   });
 
   const cities = [];
@@ -66,9 +77,11 @@ export async function startApp() {
   let selectedTripIndex = null;
   let tripSort = initialData.preferences.tripSort || DEFAULT_TRIP_SORT;
   let visitedOverlayEnabled = Boolean(initialData.preferences.visitedOverlayEnabled);
+  let theme = initialData.preferences.theme || 'light';
   let visitedCountriesLayer = null;
   let activeTab = 'trips';
   let worldGeoJsonCache = initialData.countriesGeoJson || null;
+  let renamingVisitedCityId = null;
   let pendingSaveCount = 0;
   let deferredPersistTimer = null;
   let mapOverlayLoadCount = 0;
@@ -78,13 +91,21 @@ export async function startApp() {
     getCountryLabelFromCode
   });
 
+  const migratedLegacyRatings = migrateLegacyCityRatings();
+
   syncCountriesFileStatus(
     worldGeoJsonCache
       ? 'Mapa de paises salvo em data/app-data.json'
       : 'Usando busca online para identificar paises'
   );
   syncAppDataStatus(
-    initialLoad.source === 'legacy'
+    migratedLegacyRatings
+      ? 'Notas antigas recuperadas e sincronizadas com o formato atual'
+      : initialLoad.source === 'merged-legacy-ratings'
+        ? 'Notas do navegador foram mescladas ao arquivo atual'
+      : initialLoad.source === 'merged-legacy-ratings-offline'
+        ? 'Notas do navegador foram recuperadas localmente, mas a API de arquivo esta indisponivel'
+      : initialLoad.source === 'legacy'
       ? 'Dados antigos do navegador migrados para data/app-data.json'
       : initialLoad.source === 'legacy-offline'
         ? 'API de arquivo indisponivel: usando dados antigos do navegador ate rodar pelo Vite'
@@ -105,10 +126,16 @@ export async function startApp() {
     clearCurrentRoute();
   };
   dom.tripSortInput.value = tripSort;
+  applyTheme();
   dom.tripSortInput.onchange = () => {
     tripSort = dom.tripSortInput.value;
     void persistAppData('Ordenacao salva em data/app-data.json');
     renderTrips();
+  };
+  dom.themeToggleBtn.onclick = () => {
+    theme = theme === 'dark' ? 'light' : 'dark';
+    applyTheme();
+    schedulePersistAppData('Tema salvo em data/app-data.json');
   };
   syncVisitedOverlayButton();
   dom.visitedOverlayToggleBtn.onclick = async () => {
@@ -137,6 +164,9 @@ export async function startApp() {
   renderVisitedCitiesList();
   await refreshVisitedCountriesLayer();
   await hydrateCompletedTrips();
+  if (migratedLegacyRatings) {
+    schedulePersistAppData('Notas antigas recuperadas em data/app-data.json', 0);
+  }
 
   async function handleCountriesImport(event) {
     const file = event.target.files?.[0];
@@ -232,6 +262,13 @@ export async function startApp() {
   }
 
   function loadTrip(index) {
+    if (selectedTripIndex === index) {
+      startNewTrip();
+      renderTrips();
+      renderVisitedCitiesList();
+      return;
+    }
+
     const trip = trips[index];
     if (!trip) return;
 
@@ -264,7 +301,7 @@ export async function startApp() {
       const isExpanded = index === selectedTripIndex;
       const tripCitiesMarkup = isExpanded ? renderTripCitiesSummaryMarkup(trip) : '';
       const tripRatingMarkup = trip.status === 'completed'
-        ? `<span class="trip-rating">${tripRating ? `Media ${tripRating.toFixed(1)} ★` : 'Sem notas'}</span>`
+        ? `<span class="trip-rating">${tripRating ? `${tripRating.toFixed(1)} ★` : 'Sem notas'}</span>`
         : '';
 
       li.innerHTML = `
@@ -318,9 +355,12 @@ export async function startApp() {
 
     if (cities.length > 1) {
       polyline = L.polyline(cities.map((city) => [city.lat, city.lng]), {
-        color: '#2563eb',
-        weight: 5,
-        dashArray: '6,8'
+        color: '#1d4ed8',
+        weight: 4,
+        opacity: 0.9,
+        dashArray: '12 8',
+        lineCap: 'butt',
+        lineJoin: 'miter'
       }).addTo(map);
 
       polyline.enableEdit();
@@ -706,9 +746,28 @@ export async function startApp() {
         <div class="country-cities ${isCollapsed ? '' : 'open'}"></div>
       `;
 
-      wrapper.querySelector('.country-toggle').onclick = async () => {
-        collapsedCountries[countryGroup.key] = !isCollapsed;
-        renderVisitedCitiesList();
+      wrapper.querySelector('.country-toggle').onclick = () => {
+        const isCurrentlyOpen = wrapper.querySelector('.country-cities')?.classList.contains('open');
+        const nextCollapsed = isCurrentlyOpen;
+        Object.keys(collapsedCountries).forEach((key) => {
+          collapsedCountries[key] = key === countryGroup.key ? nextCollapsed : true;
+        });
+        if (!(countryGroup.key in collapsedCountries)) {
+          collapsedCountries[countryGroup.key] = nextCollapsed;
+        }
+
+        dom.cityListEl.querySelectorAll('.country-group').forEach((groupEl) => {
+          const citiesEl = groupEl.querySelector('.country-cities');
+          const chevronEl = groupEl.querySelector('.country-toggle-chevron');
+          const isCurrentGroup = groupEl === wrapper;
+          const shouldOpen = isCurrentGroup && !nextCollapsed;
+
+          citiesEl?.classList.toggle('open', shouldOpen);
+          if (chevronEl) {
+            chevronEl.textContent = shouldOpen ? '▾' : '▸';
+          }
+        });
+
         schedulePersistAppData('Preferencia da lista de cidades salva em data/app-data.json');
       };
 
@@ -716,6 +775,7 @@ export async function startApp() {
 
       countryGroup.cities.forEach((visitedCity) => {
         const card = document.createElement('article');
+        const isRenaming = renamingVisitedCityId === visitedCity.id;
         card.className = 'city-card';
         const flagMarkup = visitedCity.countryCode ? getSingleFlagMarkup(visitedCity.countryCode) : '';
         const ratings = getCityRatings(visitedCity.id);
@@ -723,7 +783,6 @@ export async function startApp() {
         card.innerHTML = `
           <div class="city-card-header">
             <div class="city-title">
-              <span class="city-badge">&#128205;</span>
               <div class="city-name-block">
                 <span class="city-name">${escapeHtml(getDisplayVisitedCityName(visitedCity, getCityRatings))}</span>
                 <small class="city-country">
@@ -733,7 +792,16 @@ export async function startApp() {
               </div>
             </div>
             <div class="city-card-actions">
-              <button class="city-toggle-btn ${ratings.isCity !== false ? 'active' : ''}" type="button" aria-label="Alternar tipo de local" title="${ratings.isCity !== false ? 'Cidade visitavel com categorias' : 'Local com nota geral'}">&#127961;</button>
+              <button class="city-toggle-btn ${ratings.isCity !== false ? 'active' : ''}" type="button" aria-label="Alternar tipo de local" title="${ratings.isCity !== false ? 'Cidade visitavel com categorias' : 'Local com nota geral'}">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M4 18V10L8.5 7L12 10V18Z" />
+                  <path d="M12 18V6L16 3L20 6V18Z" />
+                  <path d="M8 12H9.5" />
+                  <path d="M14.5 8H17.5" />
+                  <path d="M14.5 11H17.5" />
+                  <path d="M14.5 14H17.5" />
+                </svg>
+              </button>
               <button class="icon-btn zoom-city-btn" type="button" aria-label="Centralizar cidade" title="Ver no mapa">&#128269;</button>
               <button class="icon-btn edit-city-btn" type="button" aria-label="Editar cidade" title="Editar cidade">&#9998;</button>
             </div>
@@ -748,7 +816,7 @@ export async function startApp() {
               ].join('')
               : renderRatingRow('overall', 'Nota geral', ratings.overall)}
           </div>
-          <div class="city-rename">
+          <div class="city-rename ${isRenaming ? 'open' : ''}">
             <input class="rename-city-input" type="text" value="${escapeHtml(getDisplayVisitedCityName(visitedCity, getCityRatings))}" placeholder="Renomear cidade" />
             <button class="icon-btn save-city-name-btn" type="button" aria-label="Salvar nome" title="Salvar nome">&#10003;</button>
             <button class="icon-btn cancel-city-name-btn" type="button" aria-label="Cancelar edicao" title="Cancelar edicao">&#8630;</button>
@@ -780,10 +848,15 @@ export async function startApp() {
         });
 
         card.querySelector('.edit-city-btn').onclick = () => {
-          const renameBox = card.querySelector('.city-rename');
-          renameBox.classList.add('open');
-          card.querySelector('.rename-city-input').focus();
+          renamingVisitedCityId = visitedCity.id;
+          renderVisitedCitiesList();
         };
+
+        if (isRenaming) {
+          queueMicrotask(() => {
+            card.querySelector('.rename-city-input')?.focus();
+          });
+        }
 
         card.querySelector('.save-city-name-btn').onclick = async () => {
           const input = card.querySelector('.rename-city-input');
@@ -791,12 +864,14 @@ export async function startApp() {
           const nextRatings = { ...getCityRatings(visitedCity.id) };
           nextRatings.customName = customName;
           cityRatings[visitedCity.id] = normalizeRatings(nextRatings);
+          renamingVisitedCityId = null;
           renderVisitedCitiesList();
           schedulePersistAppData('Nome personalizado salvo em data/app-data.json');
         };
 
         card.querySelector('.cancel-city-name-btn').onclick = () => {
-          card.querySelector('.city-rename').classList.remove('open');
+          renamingVisitedCityId = null;
+          renderVisitedCitiesList();
         };
 
         countryCitiesEl.appendChild(card);
@@ -899,13 +974,21 @@ export async function startApp() {
     }
   }
 
-  function getCityRatings(cityId) {
-    return normalizeRatings(cityRatings[cityId]);
+  function getCityRatings(cityOrId) {
+    const ratingKey = resolveCityRatingKey(cityOrId);
+    return normalizeRatings(ratingKey ? cityRatings[ratingKey] : undefined);
   }
 
   function getTripAverageRating(trip) {
     const cityScores = (trip.cities || [])
-      .map((city) => getCityScore(createVisitedCityId(city)))
+      .map((city) => {
+        const ratings = getCityRatings(city);
+        if (ratings.isCity === false) {
+          return 0;
+        }
+
+        return getCityScore(city);
+      })
       .filter((score) => score > 0);
 
     if (!cityScores.length) {
@@ -919,13 +1002,11 @@ export async function startApp() {
   function renderTripCitiesSummaryMarkup(trip) {
     const items = buildTripCitySummaries(trip).map((citySummary) => {
       const scoreLabel = citySummary.score > 0 ? `${citySummary.score.toFixed(1)} ★` : 'Sem nota';
-      const countLabel = citySummary.count > 1 ? `<span class="trip-city-count">${citySummary.count}x</span>` : '';
 
       return `
         <li class="trip-city-item">
           <span class="trip-city-name">${escapeHtml(citySummary.label)}</span>
           <span class="trip-city-score">${scoreLabel}</span>
-          ${countLabel}
         </li>
       `;
     }).join('');
@@ -946,13 +1027,16 @@ export async function startApp() {
     const summaries = [];
 
     (trip.cities || []).forEach((city, index) => {
-      const cityId = createVisitedCityId(city);
-      const ratings = getCityRatings(cityId);
+      const ratings = getCityRatings(city);
+      if (ratings.isCity === false) {
+        return;
+      }
+
       const customName = ratings.customName?.trim();
       const baseLabel = customName || city.cityName || city.regionName || `Ponto ${index + 1}`;
       const normalizedLabel = normalizeCountryName(baseLabel);
       const countryCode = city.countryCode?.toLowerCase() || '';
-      const score = getCityScore(cityId);
+      const score = getCityScore(city);
 
       const existing = summaries.find((summary) => {
         if (summary.countryCode !== countryCode) {
@@ -1021,8 +1105,8 @@ export async function startApp() {
     `;
   }
 
-  function getCityScore(cityId) {
-    const ratings = getCityRatings(cityId);
+  function getCityScore(cityOrId) {
+    const ratings = getCityRatings(cityOrId);
 
     if (ratings.isCity === false) {
       return ratings.overall || 0;
@@ -1043,6 +1127,78 @@ export async function startApp() {
     return total / values.length;
   }
 
+  function resolveCityRatingKey(cityOrId) {
+    if (!cityOrId) {
+      return null;
+    }
+
+    if (typeof cityOrId === 'string') {
+      if (cityRatings[cityOrId]) {
+        return cityOrId;
+      }
+
+      const parsed = parseCityRatingKey(cityOrId);
+      return parsed ? findClosestCityRatingKey(parsed) : null;
+    }
+
+    const directKey = createVisitedCityId(cityOrId);
+    if (cityRatings[directKey]) {
+      return directKey;
+    }
+
+    return findClosestCityRatingKey({
+      countryCode: cityOrId.countryCode?.toLowerCase() || 'xx',
+      lat: Number(cityOrId.lat),
+      lng: Number(cityOrId.lng)
+    });
+  }
+
+  function findClosestCityRatingKey(target) {
+    if (!Number.isFinite(target?.lat) || !Number.isFinite(target?.lng)) {
+      return null;
+    }
+
+    let bestKey = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    Object.keys(cityRatings).forEach((key) => {
+      const parsed = parseCityRatingKey(key);
+      if (!parsed) {
+        return;
+      }
+
+      const sameCountry =
+        parsed.countryCode === target.countryCode ||
+        parsed.countryCode === 'xx' ||
+        target.countryCode === 'xx';
+
+      if (!sameCountry) {
+        return;
+      }
+
+      const distance = distanceBetweenPointsKm(target.lat, target.lng, parsed.lat, parsed.lng);
+      if (distance <= 25 && distance < bestDistance) {
+        bestDistance = distance;
+        bestKey = key;
+      }
+    });
+
+    return bestKey;
+  }
+
+  function parseCityRatingKey(key) {
+    const match = String(key).match(/^([a-z]{2,3}):coords:(-?\d+(?:\.\d+)?):(-?\d+(?:\.\d+)?)$/i);
+    if (!match) {
+      return null;
+    }
+
+    return {
+      countryCode: match[1].toLowerCase(),
+      lat: Number(match[2]),
+      lng: Number(match[3])
+    };
+  }
+
   function setActiveTab(tab) {
     activeTab = tab;
     const showTrips = activeTab === 'trips';
@@ -1056,6 +1212,29 @@ export async function startApp() {
   function syncVisitedOverlayButton() {
     dom.visitedOverlayToggleBtn.classList.toggle('active', visitedOverlayEnabled);
     dom.visitedOverlayToggleBtn.setAttribute('aria-pressed', String(visitedOverlayEnabled));
+  }
+
+  function applyTheme() {
+    const isDark = theme === 'dark';
+    document.body.dataset.theme = isDark ? 'dark' : 'light';
+    dom.themeToggleBtn.classList.toggle('active', isDark);
+    dom.themeToggleBtn.setAttribute('aria-pressed', String(isDark));
+    dom.themeToggleBtn.querySelector('.overlay-pill-label').textContent = isDark ? 'Dia' : 'Noite';
+    if (isDark) {
+      if (map.hasLayer(lightTileLayer)) {
+        map.removeLayer(lightTileLayer);
+      }
+      if (!map.hasLayer(darkTileLayer)) {
+        darkTileLayer.addTo(map);
+      }
+    } else {
+      if (map.hasLayer(darkTileLayer)) {
+        map.removeLayer(darkTileLayer);
+      }
+      if (!map.hasLayer(lightTileLayer)) {
+        lightTileLayer.addTo(map);
+      }
+    }
   }
 
   async function hydrateCompletedTrips() {
@@ -1119,6 +1298,92 @@ export async function startApp() {
     dom.mapLoadingOverlayEl.classList.toggle('active', mapOverlayLoadCount > 0);
   }
 
+  function migrateLegacyCityRatings() {
+    let changed = false;
+    const completedCities = trips
+      .filter((trip) => trip.status === 'completed')
+      .flatMap((trip) => trip.cities || []);
+
+    Object.entries({ ...cityRatings }).forEach(([legacyKey, ratings]) => {
+      if (cityRatings[legacyKey] == null || isCurrentCityRatingKey(legacyKey)) {
+        return;
+      }
+
+      const migratedKey = findMigratedCityRatingKey(legacyKey, ratings, completedCities);
+      if (!migratedKey || migratedKey === legacyKey) {
+        return;
+      }
+
+      if (!cityRatings[migratedKey]) {
+        cityRatings[migratedKey] = normalizeRatings(ratings);
+      }
+
+      delete cityRatings[legacyKey];
+      changed = true;
+    });
+
+    return changed;
+  }
+
+  function findMigratedCityRatingKey(legacyKey, ratings, completedCities) {
+    const [countryCodeRaw, suffixRaw = '', latRaw = '', lngRaw = ''] = String(legacyKey).split(':');
+    const countryCode = countryCodeRaw?.toLowerCase() || '';
+    const customName = normalizeCountryName(ratings?.customName || '');
+    const suffix = normalizeCountryName(suffixRaw);
+    const latitude = Number(latRaw);
+    const longitude = Number(lngRaw);
+
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+      const coordinateMatch = completedCities.find((city) => {
+        const cityCountry = city.countryCode?.toLowerCase() || '';
+        if (countryCode && cityCountry !== countryCode) {
+          return false;
+        }
+
+        return (
+          Math.abs(city.lat - latitude) <= 0.11 &&
+          Math.abs(city.lng - longitude) <= 0.11
+        );
+      });
+
+      if (coordinateMatch) {
+        return createVisitedCityId(coordinateMatch);
+      }
+    }
+
+    const matchingCity = completedCities.find((city, index, list) => {
+      const cityCountry = city.countryCode?.toLowerCase() || '';
+      if (countryCode && cityCountry !== countryCode) {
+        return false;
+      }
+
+      const cityNames = [
+        normalizeCountryName(city.cityName || ''),
+        normalizeCountryName(city.regionName || '')
+      ].filter(Boolean);
+
+      if (customName && cityNames.includes(customName)) {
+        return true;
+      }
+
+      if (suffix && suffix !== 'ponto' && cityNames.includes(suffix)) {
+        return true;
+      }
+
+      if (!customName && (!suffix || suffix === 'ponto')) {
+        return list.filter((candidate) => (candidate.countryCode?.toLowerCase() || '') === cityCountry).length === 1;
+      }
+
+      return false;
+    });
+
+    return matchingCity ? createVisitedCityId(matchingCity) : null;
+  }
+
+  function isCurrentCityRatingKey(key) {
+    return /:coords:-?\d+(\.\d+)?:-?\d+(\.\d+)?$/.test(String(key));
+  }
+
   function snapshotAppData() {
     return createSerializableAppData({
       trips,
@@ -1126,6 +1391,7 @@ export async function startApp() {
       collapsedCountries,
       tripSort,
       visitedOverlayEnabled,
+      theme,
       countriesGeoJson: worldGeoJsonCache
     });
   }
@@ -1174,10 +1440,12 @@ export async function startApp() {
     replaceObject(collapsedCountries, nextData.collapsedCountries);
     tripSort = nextData.preferences.tripSort || DEFAULT_TRIP_SORT;
     visitedOverlayEnabled = Boolean(nextData.preferences.visitedOverlayEnabled);
+    theme = nextData.preferences.theme || 'light';
     worldGeoJsonCache = nextData.countriesGeoJson || null;
     locationService.clearCache();
 
     dom.tripSortInput.value = tripSort;
+    applyTheme();
     syncVisitedOverlayButton();
     syncCountriesFileStatus(
       worldGeoJsonCache
@@ -1224,6 +1492,7 @@ function getDomRefs() {
     saveTripBtn: document.getElementById('saveTrip'),
     clearGraphBtn: document.getElementById('clearGraph'),
     visitedOverlayToggleBtn: document.getElementById('visitedOverlayToggle'),
+    themeToggleBtn: document.getElementById('themeToggle'),
     visitedOverlayStatusEl: document.getElementById('visitedOverlayStatus'),
     tripsTabBtn: document.getElementById('tripsTabBtn'),
     citiesTabBtn: document.getElementById('citiesTabBtn'),
@@ -1239,3 +1508,4 @@ function getDomRefs() {
     mapLoadingOverlayEl: document.getElementById('mapLoadingOverlay')
   };
 }
+

@@ -13,11 +13,22 @@ let fileApiAvailable = null;
 
 export async function loadInitialAppData() {
   const fileData = await loadAppData();
+  const legacyData = await readLegacyBrowserData();
+  const mergedData = mergeLegacyRatingsIntoFileData(fileData, legacyData);
+
+  if (hasMeaningfulAppData(mergedData) && hasMoreRatingsThan(fileData, mergedData)) {
+    if (await canUseFileApi()) {
+      await saveAppData(mergedData);
+      return { data: mergedData, source: 'merged-legacy-ratings' };
+    }
+
+    return { data: mergedData, source: 'merged-legacy-ratings-offline' };
+  }
+
   if (hasMeaningfulAppData(fileData)) {
     return { data: fileData, source: 'file' };
   }
 
-  const legacyData = await readLegacyBrowserData();
   if (hasMeaningfulAppData(legacyData)) {
     if (await canUseFileApi()) {
       await saveAppData(legacyData);
@@ -129,6 +140,23 @@ export async function canUseFileApi() {
     fileApiAvailable = false;
     return false;
   }
+}
+
+function mergeLegacyRatingsIntoFileData(fileData, legacyData) {
+  const fileRatings = fileData?.cityRatings || {};
+  const legacyRatings = legacyData?.cityRatings || {};
+
+  return normalizeAppDataShape({
+    ...fileData,
+    cityRatings: {
+      ...legacyRatings,
+      ...fileRatings
+    }
+  });
+}
+
+function hasMoreRatingsThan(left, right) {
+  return Object.keys(right?.cityRatings || {}).length > Object.keys(left?.cityRatings || {}).length;
 }
 
 function parseJson(value, fallback) {

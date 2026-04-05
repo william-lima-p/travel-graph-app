@@ -1,4 +1,4 @@
-const regionNamesInEnglish = typeof Intl !== 'undefined' && Intl.DisplayNames
+﻿const regionNamesInEnglish = typeof Intl !== 'undefined' && Intl.DisplayNames
   ? new Intl.DisplayNames(['en'], { type: 'region' })
   : null;
 
@@ -102,9 +102,7 @@ export function getFlagMarkup(countryCodes) {
   const icons = countryCodes.map((code) => {
     const upperCode = code.toUpperCase();
     const countryLabel = getCountryLabelFromCode(upperCode);
-    const primarySrc = getWikimediaFlagUrl(upperCode);
-    const fallbackSrc = `https://flagcdn.com/24x18/${code}.png`;
-    const fallbackSrcSet = `https://flagcdn.com/48x36/${code}.png 2x`;
+    const primarySrc = `https://flagcdn.com/${code}.svg`;
 
     return `
       <img
@@ -114,7 +112,6 @@ export function getFlagMarkup(countryCodes) {
         title="${countryLabel}"
         loading="lazy"
         referrerpolicy="no-referrer"
-        onerror="this.onerror=null;this.src='${fallbackSrc}';this.srcset='${fallbackSrcSet}';"
       />
     `;
   }).join('');
@@ -126,9 +123,7 @@ export function getSingleFlagMarkup(countryCode) {
   const code = String(countryCode).toLowerCase();
   const upperCode = code.toUpperCase();
   const countryLabel = getCountryLabelFromCode(upperCode);
-  const primarySrc = getWikimediaFlagUrl(upperCode);
-  const fallbackSrc = `https://flagcdn.com/24x18/${code}.png`;
-  const fallbackSrcSet = `https://flagcdn.com/48x36/${code}.png 2x`;
+  const primarySrc = `https://flagcdn.com/${code}.svg`;
 
   return `
     <img
@@ -138,7 +133,6 @@ export function getSingleFlagMarkup(countryCode) {
       title="${countryLabel}"
       loading="lazy"
       referrerpolicy="no-referrer"
-      onerror="this.onerror=null;this.src='${fallbackSrc}';this.srcset='${fallbackSrcSet}';"
     />
   `;
 }
@@ -230,12 +224,6 @@ export function zoomToCities(map, list) {
 
 export function createVisitedCityId(city) {
   const countryCode = normalizeOverlayCountryCode(city?.countryCode || 'xx').toLowerCase();
-  const normalizedCityName = normalizeCountryName(city?.cityName || '');
-
-  if (normalizedCityName) {
-    return `${countryCode}:${normalizedCityName}:${city.lat.toFixed(1)}:${city.lng.toFixed(1)}`;
-  }
-
   return `${countryCode}:coords:${city.lat.toFixed(2)}:${city.lng.toFixed(2)}`;
 }
 
@@ -265,43 +253,4 @@ export function getDisplayVisitedCityName(visitedCity, getCityRatings) {
   return ratings.customName?.trim() || visitedCity.cityName;
 }
 
-function getWikimediaFlagUrl(code) {
-  const fileName = getWikimediaFlagFileName(code);
-  return `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(fileName)}?width=24`;
-}
 
-function getWikimediaFlagFileName(code) {
-  const fileNames = {
-    BR: 'Flag of Brazil.svg',
-    FR: 'Flag of France.svg',
-    US: 'Flag of the United States.svg',
-    GB: 'Flag of the United Kingdom.svg',
-    DE: 'Flag of Germany.svg',
-    IT: 'Flag of Italy.svg',
-    ES: 'Flag of Spain.svg',
-    PT: 'Flag of Portugal.svg',
-    NL: 'Flag of the Netherlands.svg',
-    BE: 'Flag of Belgium.svg',
-    AR: 'Flag of Argentina.svg',
-    CL: 'Flag of Chile.svg',
-    JP: 'Flag of Japan.svg',
-    CN: "Flag of the People's Republic of China.svg",
-    KR: 'Flag of South Korea.svg',
-    KP: 'Flag of North Korea.svg',
-    CZ: 'Flag of the Czech Republic.svg',
-    DO: 'Flag of the Dominican Republic.svg',
-    IE: 'Flag of Ireland.svg',
-    RU: 'Flag of Russia.svg',
-    CH: 'Flag of Switzerland.svg',
-    ZA: 'Flag of South Africa.svg',
-    NZ: 'Flag of New Zealand.svg',
-    AE: 'Flag of the United Arab Emirates.svg'
-  };
-
-  if (fileNames[code]) {
-    return fileNames[code];
-  }
-
-  const englishName = regionNamesInEnglish?.of(code);
-  return englishName ? `Flag of ${englishName}.svg` : `Flag of ${code}.svg`;
-}

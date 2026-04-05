@@ -12,32 +12,29 @@
   <div id="sidebar">
     <h2 class="app-title">
       <span class="pixel-planet" aria-hidden="true">
-        <svg viewBox="0 0 16 16" role="img" focusable="false">
-          <rect x="4" y="1" width="8" height="2" fill="#1d4ed8" />
-          <rect x="2" y="3" width="12" height="2" fill="#2563eb" />
-          <rect x="1" y="5" width="14" height="6" fill="#3b82f6" />
-          <rect x="2" y="11" width="12" height="2" fill="#2563eb" />
-          <rect x="4" y="13" width="8" height="2" fill="#1d4ed8" />
-          <rect x="5" y="4" width="2" height="2" fill="#34d399" />
-          <rect x="7" y="5" width="3" height="2" fill="#22c55e" />
-          <rect x="4" y="7" width="4" height="2" fill="#16a34a" />
-          <rect x="9" y="8" width="2" height="2" fill="#22c55e" />
-          <rect x="11" y="6" width="2" height="3" fill="#34d399" />
-          <rect x="3" y="6" width="1" height="4" fill="#0f172a" />
-          <rect x="12" y="6" width="1" height="4" fill="#0f172a" />
-          <rect x="4" y="2" width="8" height="1" fill="#0f172a" />
-          <rect x="2" y="4" width="1" height="6" fill="#0f172a" />
-          <rect x="13" y="4" width="1" height="6" fill="#0f172a" />
-          <rect x="4" y="13" width="8" height="1" fill="#0f172a" />
+        <svg viewBox="0 0 24 24" role="img" focusable="false">
+          <circle cx="12" cy="12" r="9" fill="#38bdf8" />
+          <path d="M7 9C8.5 7.2 10.5 6.8 12 7.4C11.6 8.5 10.8 9.6 9.6 10.4C8.7 11 7.8 11.2 7 11.1Z" fill="#16a34a" />
+          <path d="M12.7 7.7C14.7 7.1 16.8 7.9 18 9.4C17.3 10.2 16.3 10.8 15 10.9C13.8 11 12.9 10.5 12.2 9.6C12.2 8.9 12.4 8.3 12.7 7.7Z" fill="#22c55e" />
+          <path d="M8.1 12.5C9.8 11.7 11.2 12 12.1 12.8C11.8 14.1 10.9 15.3 9.4 16.1C8.2 16.7 7 16.8 6.1 16.5C6.2 14.9 6.9 13.3 8.1 12.5Z" fill="#16a34a" />
+          <path d="M13.2 12.8C14.4 12.1 16.1 12.2 17.6 12.9C17.4 14.7 16.2 16.3 14.4 17C13.5 16.3 12.9 15.2 12.7 14C12.7 13.6 12.9 13.2 13.2 12.8Z" fill="#22c55e" />
+          <circle cx="12" cy="12" r="9" fill="none" stroke="#0f172a" stroke-width="1.5" />
         </svg>
       </span>
       <span>Jornal de viagens</span>
     </h2>
 
-    <button id="visitedOverlayToggle" class="overlay-pill" type="button" aria-pressed="false" title="Visualizar países visitados">
-      <span class="overlay-pill-icon">&#128065;</span>
-      <span class="overlay-pill-label">Visualizar</span>
-    </button>
+    <div class="toolbar-row">
+      <button id="visitedOverlayToggle" class="overlay-pill" type="button" aria-pressed="false" title="Visualizar países visitados">
+        <span class="overlay-pill-icon">&#128065;</span>
+        <span class="overlay-pill-label">Visualizar</span>
+      </button>
+
+      <button id="themeToggle" class="overlay-pill theme-pill" type="button" aria-pressed="false" title="Alternar modo noturno">
+        <span class="overlay-pill-icon">&#9790;</span>
+        <span class="overlay-pill-label">Noite</span>
+      </button>
+    </div>
 
     <span id="visitedOverlayStatus" class="sr-only" aria-live="polite"></span>
 

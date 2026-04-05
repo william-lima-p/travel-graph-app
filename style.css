@@ -17,6 +17,7 @@
   height: 100vh;
   box-sizing: border-box;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   flex-shrink: 0;
 }
 
@@ -28,8 +29,8 @@
 }
 
 .pixel-planet {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   display: inline-flex;
   flex-shrink: 0;
 }
@@ -55,6 +56,8 @@
   cursor: pointer;
   font: inherit;
   font-weight: 700;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .tab-btn.active {
@@ -272,6 +275,16 @@
   flex-shrink: 0;
 }
 
+.city-toggle-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .city-toggle-btn.active {
   background: linear-gradient(135deg, #2563eb, #0f766e);
   color: white;
@@ -282,19 +295,6 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-}
-
-.city-badge {
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: #dbeafe;
-  color: #1d4ed8;
-  font-size: 12px;
-  flex-shrink: 0;
 }
 
 .city-name-block {
@@ -560,6 +560,39 @@
   color: white;
 }
 
+.deleteBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.22);
+}
+
+.deleteBtn:hover {
+  filter: brightness(0.96);
+}
+
+.map-pin-wrapper {
+  background: transparent;
+  border: none;
+}
+
+.map-pin {
+  width: 22px;
+  height: 24px;
+  filter: drop-shadow(0 7px 10px rgba(127, 29, 29, 0.16));
+}
+
+.map-pin svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .trip-card {
   padding: 10px;
   border-radius: 10px;
@@ -653,12 +686,6 @@
   white-space: nowrap;
 }
 
-.trip-city-count {
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
 
 .trip-city-empty {
   color: #64748b;
@@ -706,16 +733,109 @@
 }
 
 .flag-icon {
-  width: 18px;
   height: 13px;
-  object-fit: cover;
-  border-radius: 2px;
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+  width: auto;
+  object-fit: contain;
+  border-radius: 0;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.06);
 }
 
 .flag-icon.tiny {
-  width: 16px;
   height: 12px;
+  width: auto;
+}
+
+.toolbar-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+body[data-theme='dark'] {
+  background: #020617;
+  color: #cbd5e1;
+}
+
+body[data-theme='dark'] #sidebar {
+  background: #0f172a;
+  color: #cbd5e1;
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.28);
+}
+
+body[data-theme='dark'] .app-title,
+body[data-theme='dark'] .section-header h3,
+body[data-theme='dark'] .city-name,
+body[data-theme='dark'] .country-toggle-label {
+  color: #f8fafc;
+}
+
+body[data-theme='dark'] .trip-help,
+body[data-theme='dark'] .section-header small,
+body[data-theme='dark'] .country-toggle-count,
+body[data-theme='dark'] .country-toggle-chevron,
+body[data-theme='dark'] .city-country,
+body[data-theme='dark'] .geojson-tools small,
+body[data-theme='dark'] .data-tools small,
+body[data-theme='dark'] .rating-label,
+body[data-theme='dark'] .field {
+  color: #94a3b8;
+}
+
+body[data-theme='dark'] .tab-btn,
+body[data-theme='dark'] .overlay-pill,
+body[data-theme='dark'] .city-toggle-btn,
+body[data-theme='dark'] .btn.secondary {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+body[data-theme='dark'] .tab-btn.active,
+body[data-theme='dark'] .overlay-pill.active,
+body[data-theme='dark'] .city-toggle-btn.active {
+  background: linear-gradient(135deg, #38bdf8, #14b8a6);
+  color: #06121d;
+}
+
+body[data-theme='dark'] .trip-mode {
+  background: #172554;
+  color: #93c5fd;
+}
+
+body[data-theme='dark'] .country-group,
+body[data-theme='dark'] .trip-card,
+body[data-theme='dark'] .city-card {
+  background: #111827;
+  border-color: #334155;
+}
+
+body[data-theme='dark'] .country-toggle,
+body[data-theme='dark'] .country-cities,
+body[data-theme='dark'] .city-empty {
+  background: #0b1220;
+}
+
+body[data-theme='dark'] .country-toggle:hover,
+body[data-theme='dark'] .trip-card:hover {
+  background: #1e293b;
+}
+
+body[data-theme='dark'] .field input,
+body[data-theme='dark'] .field select,
+body[data-theme='dark'] #tripName,
+body[data-theme='dark'] .city-rename input {
+  background: #020617;
+  color: #f8fafc;
+  border-color: #475569;
+}
+
+body[data-theme='dark'] .icon-btn {
+  background: #0f2c3a;
+  color: #7dd3fc;
+}
+
+body[data-theme='dark'] .icon-btn:hover {
+  background: #12384a;
 }
 
 @keyframes spin {
