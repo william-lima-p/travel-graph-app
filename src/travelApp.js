@@ -1006,7 +1006,8 @@ export async function startApp() {
         trip.cities.forEach((city, index) => {
           if (!Number.isFinite(city.lat) || !Number.isFinite(city.lng)) return;
 
-          const match = findMatchingVisitedCityGroup(groups, city);
+          const displayName = getResolvedVisitedCityName(city, index);
+          const match = findMatchingVisitedCityGroup(groups, city, displayName);
           if (match) {
             match.points.push(city);
             match.tripNames.add(trip.name);
@@ -1017,7 +1018,7 @@ export async function startApp() {
 
           groups.push({
             id: createVisitedCityId(city),
-            cityName: getDisplayCityName(city, index),
+            cityName: displayName,
             countryCode: city.countryCode || null,
             countryLabel: getCountryDisplayLabel(city),
             lat: city.lat,
@@ -1033,23 +1034,28 @@ export async function startApp() {
     return groups;
   }
 
-  function findMatchingVisitedCityGroup(groups, city) {
-    const cityName = normalizeCountryName(city.cityName || '');
+  function getResolvedVisitedCityName(city, index) {
+    const ratings = getCityRatings(city);
+    return ratings.customName?.trim() || getDisplayCityName(city, index);
+  }
+
+  function findMatchingVisitedCityGroup(groups, city, displayName) {
+    const cityName = normalizeTripCityLabel(displayName || city.cityName || '');
     const countryCode = city.countryCode?.toLowerCase() || '';
 
     return groups.find((group) => {
       const sameCountry = !countryCode || !group.countryCode || group.countryCode?.toLowerCase() === countryCode;
       if (!sameCountry) return false;
 
-      const groupName = normalizeCountryName(group.cityName || '');
+      const groupName = normalizeTripCityLabel(group.cityName || '');
       const distance = distanceBetweenPointsKm(group.lat, group.lng, city.lat, city.lng);
 
       if (groupName && cityName && groupName === cityName && distance <= CITY_PROXIMITY_KM * 2) {
         return true;
       }
 
-      if (groupName || cityName) {
-        return false;
+      if (groupName && cityName) {
+        return areSimilarTripCityLabels(groupName, cityName) && distance <= 12;
       }
 
       return distance <= CITY_PROXIMITY_KM;
@@ -1144,6 +1150,9 @@ export async function startApp() {
 
     (trip.cities || []).forEach((city, index) => {
       const ratings = getCityRatings(city);
+      if (ratings.isCity === false) {
+        return;
+      }
       const customName = ratings.customName?.trim();
       const baseLabel = customName || getDisplayCityName(city, index);
       const normalizedLabel = normalizeTripCityLabel(baseLabel);
@@ -1292,7 +1301,7 @@ export async function startApp() {
       }
 
       const parsed = parseCityRatingKey(cityOrId);
-      return parsed ? findClosestCityRatingKey(parsed, 25) : null;
+      return parsed ? findClosestCityRatingKey(parsed, 1.2) : null;
     }
 
     const directKey = createVisitedCityId(cityOrId);
