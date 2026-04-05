@@ -5,6 +5,7 @@
 const regionNamesInPortuguese = typeof Intl !== 'undefined' && Intl.DisplayNames
   ? new Intl.DisplayNames(['pt-BR'], { type: 'region' })
   : null;
+const countryCodeByNormalizedLabel = buildCountryCodeLookup();
 
 export function compareMonthAsc(a, b) {
   const left = a || '9999-99';
@@ -82,7 +83,7 @@ export function getTripCountryCodes(trip) {
   const seen = new Set();
 
   (trip?.cities || []).forEach((city) => {
-    const code = city?.countryCode?.toLowerCase();
+    const code = resolveCountryCode(city)?.toLowerCase();
     if (!code || seen.has(code)) {
       return;
     }
@@ -120,7 +121,11 @@ export function getFlagMarkup(countryCodes) {
 }
 
 export function getSingleFlagMarkup(countryCode) {
-  const code = String(countryCode).toLowerCase();
+  const code = resolveCountryCode({ countryCode })?.toLowerCase();
+  if (!code) {
+    return '';
+  }
+
   const upperCode = code.toUpperCase();
   const countryLabel = getCountryLabelFromCode(upperCode);
   const primarySrc = `https://flagcdn.com/${code}.svg`;
@@ -156,8 +161,61 @@ export function getCountryDisplayLabel(city) {
   return 'Sem pais identificado';
 }
 
+export function resolveCountryCode(city) {
+  const directCode = city?.countryCode ? normalizeOverlayCountryCode(city.countryCode).toLowerCase() : '';
+  if (directCode) {
+    return directCode;
+  }
+
+  const normalizedCountry = normalizeCountryName(city?.country || '');
+  if (normalizedCountry && countryCodeByNormalizedLabel.has(normalizedCountry)) {
+    return countryCodeByNormalizedLabel.get(normalizedCountry);
+  }
+
+  return null;
+}
+
 export function getDisplayCityName(city, index) {
   return city?.cityName || city?.regionName || formatCoordinateLabel(city, index);
+}
+
+function buildCountryCodeLookup() {
+  const lookup = new Map();
+  const aliases = {
+    alemanha: 'de',
+    argentina: 'ar',
+    austria: 'at',
+    belgica: 'be',
+    brasil: 'br',
+    chile: 'cl',
+    china: 'cn',
+    'coreia do sul': 'kr',
+    'coreia do norte': 'kp',
+    'emirados arabes unidos': 'ae',
+    espanha: 'es',
+    'estados unidos': 'us',
+    franca: 'fr',
+    ireland: 'ie',
+    irlanda: 'ie',
+    italia: 'it',
+    japao: 'jp',
+    'nova zelandia': 'nz',
+    'paises baixos': 'nl',
+    peru: 'pe',
+    portugal: 'pt',
+    'reino unido': 'gb',
+    'republica tcheca': 'cz',
+    'republica dominicana': 'do',
+    russia: 'ru',
+    sudafrica: 'za',
+    suica: 'ch'
+  };
+
+  Object.entries(aliases).forEach(([label, code]) => {
+    lookup.set(normalizeCountryName(label), code);
+  });
+
+  return lookup;
 }
 
 export function formatCoordinateLabel(city, index) {

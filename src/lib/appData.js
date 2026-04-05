@@ -14,9 +14,13 @@ let fileApiAvailable = null;
 export async function loadInitialAppData() {
   const fileData = await loadAppData();
   const legacyData = await readLegacyBrowserData();
-  const mergedData = mergeLegacyRatingsIntoFileData(fileData, legacyData);
+  const mergedData = mergeLegacyBrowserDataIntoFileData(fileData, legacyData);
 
-  if (hasMeaningfulAppData(mergedData) && hasMoreRatingsThan(fileData, mergedData)) {
+  if (
+    fileApiAvailable === true &&
+    hasMeaningfulAppData(mergedData) &&
+    shouldPersistMergedData(fileData, mergedData)
+  ) {
     if (await canUseFileApi()) {
       await saveAppData(mergedData);
       return { data: mergedData, source: 'merged-legacy-ratings' };
@@ -57,6 +61,11 @@ export async function loadAppData() {
     fileApiAvailable = true;
     return normalizeAppDataShape(await response.json());
   } catch {
+    const fallbackData = await loadStaticAppData();
+    if (fallbackData) {
+      return fallbackData;
+    }
+
     return createDefaultAppData();
   }
 }
@@ -142,21 +151,71 @@ export async function canUseFileApi() {
   }
 }
 
-function mergeLegacyRatingsIntoFileData(fileData, legacyData) {
-  const fileRatings = fileData?.cityRatings || {};
-  const legacyRatings = legacyData?.cityRatings || {};
+async function loadStaticAppData() {
+  const fallbackSources = [
+    '/data/app-data.json',
+    './data/app-data.json',
+    'data/app-data.json'
+  ];
 
+  for (const source of fallbackSources) {
+    try {
+      const response = await fetch(source, {
+        headers: {
+          Accept: 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        continue;
+      }
+
+      return normalizeAppDataShape(await response.json());
+    } catch {
+      continue;
+    }
+  }
+
+  fileApiAvailable = false;
+  return null;
+}
+
+function mergeLegacyBrowserDataIntoFileData(fileData, legacyData) {
   return normalizeAppDataShape({
     ...fileData,
+    trips:
+      Array.isArray(fileData?.trips) && fileData.trips.length
+        ? fileData.trips
+        : (legacyData?.trips || []),
     cityRatings: {
-      ...legacyRatings,
-      ...fileRatings
-    }
+      ...(legacyData?.cityRatings || {}),
+      ...(fileData?.cityRatings || {})
+    },
+    collapsedCountries: {
+      ...(legacyData?.collapsedCountries || {}),
+      ...(fileData?.collapsedCountries || {})
+    },
+    preferences: {
+      ...legacyData?.preferences,
+      ...fileData?.preferences
+    },
+    countriesGeoJson: fileData?.countriesGeoJson || legacyData?.countriesGeoJson || null
   });
 }
 
 function hasMoreRatingsThan(left, right) {
   return Object.keys(right?.cityRatings || {}).length > Object.keys(left?.cityRatings || {}).length;
+}
+
+function shouldPersistMergedData(fileData, mergedData) {
+  return (
+    hasMoreRatingsThan(fileData, mergedData) ||
+    (
+      (!Array.isArray(fileData?.trips) || !fileData.trips.length) &&
+      Array.isArray(mergedData?.trips) &&
+      mergedData.trips.length > 0
+    )
+  );
 }
 
 function parseJson(value, fallback) {

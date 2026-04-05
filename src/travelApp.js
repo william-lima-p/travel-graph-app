@@ -20,6 +20,7 @@
   zoomToCities
 } from './lib/helpers.js';
 import {
+  createDefaultAppData,
   createSerializableAppData,
   DEFAULT_TRIP_SORT,
   hasResolvedLocation,
@@ -39,8 +40,16 @@ import {
 const CITY_PROXIMITY_KM = 35;
 
 export async function startApp() {
-  const initialLoad = await loadInitialAppData();
-  const initialData = normalizeAppDataShape(initialLoad.data);
+  let initialLoad = { data: createDefaultAppData(), source: 'empty' };
+  let initialData = normalizeAppDataShape(initialLoad.data);
+  let initialLoadError = null;
+
+  try {
+    initialLoad = await loadInitialAppData();
+    initialData = normalizeAppDataShape(initialLoad.data);
+  } catch (error) {
+    initialLoadError = error;
+  }
 
   const map = L.map('map', { editable: true }).setView([-23.55, -46.63], 4);
   const lightTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -82,6 +91,7 @@ export async function startApp() {
   let visitedCountriesLayer = null;
   let activeTab = 'trips';
   let worldGeoJsonCache = initialData.countriesGeoJson || null;
+  let editingTripIndex = null;
   let renamingVisitedCityId = null;
   let pendingSaveCount = 0;
   let deferredPersistTimer = null;
@@ -100,7 +110,9 @@ export async function startApp() {
       : 'Usando busca online para identificar paises'
   );
   syncAppDataStatus(
-    migratedLegacyRatings
+    initialLoadError
+      ? 'Falha ao carregar os dados iniciais. A interface foi aberta em modo vazio.'
+      : migratedLegacyRatings
       ? 'Notas antigas recuperadas e sincronizadas com o formato atual'
       : initialLoad.source === 'merged-legacy-ratings'
         ? 'Notas do navegador foram mescladas ao arquivo atual'
@@ -119,6 +131,9 @@ export async function startApp() {
   dom.appDataFileInput.onchange = handleAppDataImport;
   dom.exportDataBtn.onclick = handleAppDataExport;
   dom.saveTripBtn.onclick = handleSaveTrip;
+  dom.saveEditTripBtn.onclick = handleSaveEditedTrip;
+  dom.cancelEditTripBtn.onclick = closeEditTripModal;
+  dom.closeEditTripModalBtn.onclick = closeEditTripModal;
   dom.newTripBtn.onclick = () => {
     startNewTrip({ openEditor: true });
     renderTrips();
@@ -151,6 +166,13 @@ export async function startApp() {
   };
   dom.tripsTabBtn.onclick = () => setActiveTab('trips');
   dom.citiesTabBtn.onclick = () => setActiveTab('cities');
+  dom.editTripModal.onclick = (event) => {
+    if (event.target === dom.editTripModal) {
+      closeEditTripModal();
+    }
+  };
+  bindMonthPickerToggle(dom.tripMonthInput);
+  bindMonthPickerToggle(dom.editTripMonthInput);
 
   map.on('click', async (event) => {
     const city = normalizeCity({ lat: event.latlng.lat, lng: event.latlng.lng });
@@ -229,6 +251,39 @@ export async function startApp() {
     syncAppDataStatus('Arquivo de dados exportado');
   }
 
+  function bindMonthPickerToggle(input) {
+    if (!input) return;
+
+    const toggle = document.querySelector(`.month-picker-toggle[data-target="${input.id}"]`);
+    if (!toggle) return;
+
+    let pickerOpen = false;
+
+    input.addEventListener('blur', () => {
+      pickerOpen = false;
+    });
+
+    input.addEventListener('change', () => {
+      pickerOpen = false;
+    });
+
+    toggle.addEventListener('click', (event) => {
+      event.preventDefault();
+
+      if (pickerOpen) {
+        input.blur();
+        pickerOpen = false;
+        return;
+      }
+
+      input.focus();
+      if (typeof input.showPicker === 'function') {
+        input.showPicker();
+      }
+      pickerOpen = true;
+    });
+  }
+
   async function handleSaveTrip() {
     const name = dom.tripNameInput.value.trim();
     if (!name) return;
@@ -240,9 +295,7 @@ export async function startApp() {
 
       const snapshot = cities.map((city) => ({ ...city }));
       const distance = totalDistance(snapshot);
-      const existingTrip = selectedTripIndex !== null ? trips[selectedTripIndex] : null;
       const tripRecord = normalizeTripRecord({
-        ...existingTrip,
         name,
         month: dom.tripMonthInput.value,
         status: dom.tripStatusInput.value,
@@ -250,11 +303,7 @@ export async function startApp() {
         distance
       });
 
-      if (selectedTripIndex !== null) {
-        trips[selectedTripIndex] = tripRecord;
-      } else {
-        trips.push(tripRecord);
-      }
+      trips.push(tripRecord);
 
       await persistAppData('Viagem salva em data/app-data.json');
       startNewTrip();
@@ -278,9 +327,6 @@ export async function startApp() {
     if (!trip) return;
 
     selectedTripIndex = index;
-    dom.tripNameInput.value = trip.name;
-    dom.tripMonthInput.value = trip.month;
-    dom.tripStatusInput.value = trip.status;
 
     cities.length = 0;
     trip.cities.forEach((city) => cities.push(normalizeCity(city)));
@@ -297,11 +343,17 @@ export async function startApp() {
   function renderTrips() {
     dom.tripList.innerHTML = '';
 
+    if (!trips.length) {
+      dom.tripList.innerHTML = '<li class="city-empty">Adicione uma nova viagem para começar</li>';
+      return;
+    }
+
     getSortedTrips().forEach(({ trip, index }) => {
       const li = document.createElement('li');
       const flagMarkup = getFlagMarkup(getTripCountryCodes(trip));
       const dateLabel = formatTripMonth(trip.month);
       const statusLabel = trip.status === 'completed' ? 'Concluido' : 'Planejado';
+      const tripDistance = Number.isFinite(trip.distance) ? trip.distance : totalDistance(trip.cities || []);
       const tripRating = getTripAverageRating(trip);
       const isExpanded = index === selectedTripIndex;
       const tripCitiesMarkup = isExpanded ? renderTripCitiesSummaryMarkup(trip) : '';
@@ -320,17 +372,25 @@ export async function startApp() {
               </small>
               <br>
               <small class="trip-meta">
+                <span>${tripDistance.toFixed(1)} km</span>
                 ${tripRatingMarkup}
                 ${flagMarkup}
               </small>
             </div>
-            <button class="btn danger deleteBtn" type="button" aria-label="Excluir viagem">×</button>
+            <div class="trip-card-actions">
+              <button class="btn secondary editTripBtn" type="button" aria-label="Editar viagem" title="Editar viagem">✎</button>
+              <button class="btn danger deleteBtn" type="button" aria-label="Excluir viagem">×</button>
+            </div>
           </div>
           ${tripCitiesMarkup}
         </div>
       `;
 
       li.onclick = () => loadTrip(index);
+      li.querySelector('.editTripBtn').onclick = (event) => {
+        event.stopPropagation();
+        openEditTripModal(index);
+      };
       li.querySelector('.deleteBtn').onclick = async (event) => {
         event.stopPropagation();
 
@@ -397,10 +457,21 @@ export async function startApp() {
         await syncSelectedTripFromCities();
       });
 
-      marker.on('contextmenu', async () => {
+      marker.on('contextmenu', async (event) => {
+        event?.originalEvent?.preventDefault?.();
+        event?.originalEvent?.stopPropagation?.();
+
         const markerIndex = markers.indexOf(marker);
-        markers.splice(markerIndex, 1);
-        cities.splice(markerIndex, 1);
+        const cityIndex = cities.indexOf(city);
+
+        if (markerIndex >= 0) {
+          markers.splice(markerIndex, 1);
+        }
+
+        if (cityIndex >= 0) {
+          cities.splice(cityIndex, 1);
+        }
+
         map.removeLayer(marker);
         redraw();
         await syncSelectedTripFromCities();
@@ -505,9 +576,9 @@ export async function startApp() {
     }
 
     const trip = trips[selectedTripIndex];
-    dom.tripModeEl.textContent = `Editando: ${trip?.name || 'viagem atual'}`;
-    dom.tripHelpEl.textContent = 'Arraste os pontos para ajustar a rota. Use o botao direito em um ponto para excluir.';
-    dom.tripEditorToggleLabelEl.textContent = trip?.name || 'Editar viagem';
+    dom.tripModeEl.textContent = `Rota carregada: ${trip?.name || 'viagem atual'}`;
+    dom.tripHelpEl.textContent = 'Arraste os pontos para ajustar a rota. Use o botao direito em um ponto para excluir. Use "Editar" no card para alterar nome, data e status.';
+    dom.tripEditorToggleLabelEl.textContent = 'Nova viagem';
   }
 
   async function ensureCityDetails(city) {
@@ -568,9 +639,46 @@ export async function startApp() {
 
     trip.cities = cities.map((city) => ({ ...city }));
     trip.distance = totalDistance(cities);
-    trip.month = dom.tripMonthInput.value;
-    trip.status = dom.tripStatusInput.value;
     await persistAppData('Rota atualizada em data/app-data.json');
+    renderTrips();
+    renderVisitedCitiesList();
+    await refreshVisitedCountriesLayer();
+  }
+
+  function openEditTripModal(index) {
+    const trip = trips[index];
+    if (!trip) return;
+
+    editingTripIndex = index;
+    dom.editTripNameInput.value = trip.name || '';
+    dom.editTripMonthInput.value = trip.month || '';
+    dom.editTripStatusInput.value = trip.status || 'planned';
+    dom.editTripModal.hidden = false;
+    dom.editTripModal.classList.add('open');
+  }
+
+  function closeEditTripModal() {
+    editingTripIndex = null;
+    dom.editTripModal.classList.remove('open');
+    dom.editTripModal.hidden = true;
+  }
+
+  async function handleSaveEditedTrip() {
+    if (editingTripIndex === null) return;
+
+    const trip = trips[editingTripIndex];
+    if (!trip) return;
+
+    const nextName = dom.editTripNameInput.value.trim();
+    if (!nextName) return;
+
+    trip.name = nextName;
+    trip.month = dom.editTripMonthInput.value;
+    trip.status = dom.editTripStatusInput.value;
+
+    await persistAppData('Viagem editada em data/app-data.json');
+    closeEditTripModal();
+    updateTripMode();
     renderTrips();
     renderVisitedCitiesList();
     await refreshVisitedCountriesLayer();
@@ -1036,23 +1144,29 @@ export async function startApp() {
 
     (trip.cities || []).forEach((city, index) => {
       const ratings = getCityRatings(city);
-      if (ratings.isCity === false) {
-        return;
-      }
-
       const customName = ratings.customName?.trim();
-      const baseLabel = customName || city.cityName || city.regionName || `Ponto ${index + 1}`;
-      const normalizedLabel = normalizeCountryName(baseLabel);
+      const baseLabel = customName || getDisplayCityName(city, index);
+      const normalizedLabel = normalizeTripCityLabel(baseLabel);
       const countryCode = city.countryCode?.toLowerCase() || '';
       const score = getCityScore(city);
 
       const existing = summaries.find((summary) => {
-        if (summary.countryCode !== countryCode) {
+        const sameCountry =
+          !summary.countryCode ||
+          !countryCode ||
+          summary.countryCode === countryCode;
+
+        if (!sameCountry) {
           return false;
         }
 
         if (summary.normalizedLabel && normalizedLabel) {
-          return summary.normalizedLabel === normalizedLabel;
+          if (summary.normalizedLabel === normalizedLabel) {
+            return true;
+          }
+
+          const distance = distanceBetweenPointsKm(summary.lat, summary.lng, city.lat, city.lng);
+          return areSimilarTripCityLabels(summary.normalizedLabel, normalizedLabel) && distance <= 12;
         }
 
         const distance = distanceBetweenPointsKm(summary.lat, summary.lng, city.lat, city.lng);
@@ -1067,7 +1181,7 @@ export async function startApp() {
         if (!existing.customName && customName) {
           existing.label = customName;
           existing.customName = true;
-          existing.normalizedLabel = normalizeCountryName(customName);
+          existing.normalizedLabel = normalizeTripCityLabel(customName);
         }
         return;
       }
@@ -1085,6 +1199,38 @@ export async function startApp() {
     });
 
     return summaries;
+  }
+
+  function areSimilarTripCityLabels(leftLabel, rightLabel) {
+    if (!leftLabel || !rightLabel) {
+      return false;
+    }
+
+    if (leftLabel === rightLabel) {
+      return true;
+    }
+
+    if (leftLabel.includes(rightLabel) || rightLabel.includes(leftLabel)) {
+      return true;
+    }
+
+    const leftTokens = leftLabel.split(' ').filter((token) => token.length > 2);
+    const rightTokens = rightLabel.split(' ').filter((token) => token.length > 2);
+
+    if (!leftTokens.length || !rightTokens.length) {
+      return false;
+    }
+
+    const sharedTokens = leftTokens.filter((token) => rightTokens.includes(token));
+    return sharedTokens.length >= Math.min(leftTokens.length, rightTokens.length);
+  }
+
+  function normalizeTripCityLabel(label) {
+    return normalizeCountryName(label)
+      .replaceAll('ae', 'a')
+      .replaceAll('oe', 'o')
+      .replaceAll('ue', 'u')
+      .replaceAll('ss', 's');
   }
 
   function renderTripCitiesMarkup(trip) {
@@ -1146,7 +1292,7 @@ export async function startApp() {
       }
 
       const parsed = parseCityRatingKey(cityOrId);
-      return parsed ? findClosestCityRatingKey(parsed) : null;
+      return parsed ? findClosestCityRatingKey(parsed, 25) : null;
     }
 
     const directKey = createVisitedCityId(cityOrId);
@@ -1158,10 +1304,10 @@ export async function startApp() {
       countryCode: cityOrId.countryCode?.toLowerCase() || 'xx',
       lat: Number(cityOrId.lat),
       lng: Number(cityOrId.lng)
-    });
+    }, 1.2);
   }
 
-  function findClosestCityRatingKey(target) {
+  function findClosestCityRatingKey(target, maxDistanceKm = 25) {
     if (!Number.isFinite(target?.lat) || !Number.isFinite(target?.lng)) {
       return null;
     }
@@ -1185,7 +1331,7 @@ export async function startApp() {
       }
 
       const distance = distanceBetweenPointsKm(target.lat, target.lng, parsed.lat, parsed.lng);
-      if (distance <= 25 && distance < bestDistance) {
+      if (distance <= maxDistanceKm && distance < bestDistance) {
         bestDistance = distance;
         bestKey = key;
       }
@@ -1303,6 +1449,8 @@ export async function startApp() {
 
   function syncCountriesFileStatus(message) {
     dom.countriesFileStatusEl.textContent = message;
+    dom.importCountriesBtn.title = message;
+    dom.importCountriesBtn.setAttribute('aria-label', message);
   }
 
   function syncAppDataStatus(message) {
@@ -1524,7 +1672,14 @@ function getDomRefs() {
     exportDataBtn: document.getElementById('exportDataBtn'),
     appDataFileInput: document.getElementById('appDataFileInput'),
     appDataStatusEl: document.getElementById('appDataStatus'),
-    mapLoadingOverlayEl: document.getElementById('mapLoadingOverlay')
+    mapLoadingOverlayEl: document.getElementById('mapLoadingOverlay'),
+    editTripModal: document.getElementById('editTripModal'),
+    editTripNameInput: document.getElementById('editTripName'),
+    editTripMonthInput: document.getElementById('editTripMonth'),
+    editTripStatusInput: document.getElementById('editTripStatus'),
+    saveEditTripBtn: document.getElementById('saveEditTrip'),
+    cancelEditTripBtn: document.getElementById('cancelEditTrip'),
+    closeEditTripModalBtn: document.getElementById('closeEditTripModal')
   };
 }
 

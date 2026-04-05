@@ -57,9 +57,12 @@
           <input id="tripName" placeholder="Nome da viagem" />
 
           <div class="form-row">
-            <label class="field">
+            <label class="field month-field">
               <span>Mês/ano</span>
-              <input id="tripMonth" type="month" />
+              <div class="month-input-wrap">
+                <input id="tripMonth" class="month-input" type="month" />
+                <button class="month-picker-toggle" type="button" data-target="tripMonth" aria-label="Abrir ou fechar calendário">🗓</button>
+              </div>
             </label>
 
             <label class="field">
@@ -79,17 +82,14 @@
         </div>
       </section>
 
-      <div class="geojson-tools">
-        <button id="importCountriesBtn" class="btn secondary" type="button">Importar paises</button>
-        <input id="countriesFileInput" type="file" accept=".geojson,application/geo+json,application/json" hidden />
-        <small id="countriesFileStatus">Usando busca online para identificar paises</small>
-      </div>
-
       <div class="data-tools">
         <div class="action-row">
           <button id="importDataBtn" class="btn secondary" type="button">Importar dados</button>
           <button id="exportDataBtn" class="btn secondary" type="button">Baixar dados</button>
+          <button id="importCountriesBtn" class="btn secondary import-countries-btn" type="button" aria-label="Importar paises" title="Importar paises">↥</button>
         </div>
+        <input id="countriesFileInput" type="file" accept=".geojson,application/geo+json,application/json" hidden />
+        <small id="countriesFileStatus" class="sr-only">Usando busca online para identificar paises</small>
         <input id="appDataFileInput" type="file" accept=".json,application/json" hidden />
         <small id="appDataStatus">Dados sincronizados com data/app-data.json</small>
       </div>
@@ -125,6 +125,45 @@
       <div class="map-loading-card">
         <span class="map-spinner"></span>
         <span>Carregando visualizacao...</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="editTripModal" class="modal-overlay" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="editTripTitle">
+      <div class="modal-header">
+        <h3 id="editTripTitle">Editar viagem</h3>
+        <button id="closeEditTripModal" class="icon-btn" type="button" aria-label="Fechar edição">×</button>
+      </div>
+
+      <div class="modal-body">
+        <label class="field">
+          <span>Nome da viagem</span>
+          <input id="editTripName" placeholder="Nome da viagem" />
+        </label>
+
+        <div class="form-row">
+          <label class="field month-field">
+            <span>Mês/ano</span>
+            <div class="month-input-wrap">
+              <input id="editTripMonth" class="month-input" type="month" />
+              <button class="month-picker-toggle" type="button" data-target="editTripMonth" aria-label="Abrir ou fechar calendário">🗓</button>
+            </div>
+          </label>
+
+          <label class="field">
+            <span>Status</span>
+            <select id="editTripStatus">
+              <option value="planned">Planejado</option>
+              <option value="completed">Concluído</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="cancelEditTrip" class="btn secondary" type="button">Cancelar</button>
+        <button id="saveEditTrip" class="btn primary" type="button">Salvar edição</button>
       </div>
     </div>
   </div>

@@ -42,9 +42,9 @@ export function createLocationService({ loadWorldGeoJson, getCountryLabelFromCod
       }
 
       const request = (async () => {
-        const primary = await reverseGeocodeWithNominatim(lat, lng);
-        const secondary = needsBetterLocationResult(primary)
-          ? await reverseGeocodeWithBigDataCloud(lat, lng)
+        const primary = await reverseGeocodeWithBigDataCloud(lat, lng);
+        const secondary = shouldTryNominatim(primary)
+          ? await reverseGeocodeWithNominatim(lat, lng)
           : null;
         const countryFallback = needsCountryFallback(primary, secondary)
           ? await reverseGeocodeCountryOnly(lat, lng)
@@ -111,6 +111,19 @@ function needsBetterLocationResult(result) {
   return !result || !result.cityName || !result.country || !result.countryCode;
 }
 
+function shouldTryNominatim(result) {
+  if (!needsBetterLocationResult(result)) {
+    return false;
+  }
+
+  if (typeof window === 'undefined') {
+    return true;
+  }
+
+  const hostname = window.location?.hostname || '';
+  return hostname !== 'localhost' && hostname !== '127.0.0.1';
+}
+
 function needsCountryFallback(primary, secondary) {
   const merged = mergeLocationResults(primary, secondary);
   return !merged.country || !merged.countryCode;
@@ -146,17 +159,17 @@ async function reverseGeocodeWithNominatim(lat, lng) {
   url.searchParams.set('addressdetails', '1');
   url.searchParams.set('accept-language', 'pt-BR');
 
-  const response = await fetch(url, {
+  const response = await safeFetchJson(url, {
     headers: {
       Accept: 'application/json'
     }
   });
 
-  if (!response.ok) {
+  if (!response) {
     return null;
   }
 
-  const data = await response.json();
+  const data = response;
   return {
     cityName: pickBestCityName(data.address, data.display_name),
     regionName: data.address?.state || data.address?.region || null,
@@ -171,12 +184,11 @@ async function reverseGeocodeWithBigDataCloud(lat, lng) {
   url.searchParams.set('longitude', lng);
   url.searchParams.set('localityLanguage', 'pt');
 
-  const response = await fetch(url);
-  if (!response.ok) {
+  const data = await safeFetchJson(url);
+  if (!data) {
     return null;
   }
 
-  const data = await response.json();
   return {
     cityName:
       data.city ||
@@ -198,17 +210,17 @@ async function reverseGeocodeCountryOnly(lat, lng) {
   url.searchParams.set('addressdetails', '1');
   url.searchParams.set('accept-language', 'pt-BR');
 
-  const response = await fetch(url, {
+  const response = await safeFetchJson(url, {
     headers: {
       Accept: 'application/json'
     }
   });
 
-  if (!response.ok) {
+  if (!response) {
     return null;
   }
 
-  const data = await response.json();
+  const data = response;
   return {
     cityName: null,
     regionName: data.address?.state || data.address?.region || null,
@@ -258,6 +270,19 @@ function pointInFeature(lat, lng, feature) {
   }
 
   return false;
+}
+
+async function safeFetchJson(url, options) {
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      return null;
+    }
+
+    return await response.json();
+  } catch {
+    return null;
+  }
 }
 
 function pointInPolygon(point, polygonRings) {

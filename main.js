@@ -1099,6 +1099,8 @@ async function loadWorldGeoJson() {
 
 function syncCountriesFileStatus(message) {
   countriesFileStatusEl.textContent = message;
+  importCountriesBtn.title = message;
+  importCountriesBtn.setAttribute('aria-label', message);
 }
 
 function openGeoJsonDatabase() {
