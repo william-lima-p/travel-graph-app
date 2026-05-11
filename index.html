@@ -25,10 +25,17 @@
     </h2>
 
     <div class="toolbar-row">
-      <button id="visitedOverlayToggle" class="overlay-pill" type="button" aria-pressed="false" title="Visualizar países visitados">
-        <span class="overlay-pill-icon">&#128065;</span>
-        <span class="overlay-pill-label">Visualizar</span>
-      </button>
+      <div class="overlay-stack">
+        <button id="visitedOverlayToggle" class="overlay-pill" type="button" aria-pressed="false" title="Visualizar países visitados">
+          <span class="overlay-pill-icon">&#128065;</span>
+          <span class="overlay-pill-label">Visualizar</span>
+        </button>
+
+        <button id="visitedOverlayModeToggle" class="overlay-pill mode-pill" type="button" title="Alternar visualização entre países e regiões">
+          <span class="overlay-pill-icon" aria-hidden="true"></span>
+          <span class="overlay-pill-label">Países</span>
+        </button>
+      </div>
 
       <button id="themeToggle" class="overlay-pill theme-pill" type="button" aria-pressed="false" title="Alternar modo noturno">
         <span class="overlay-pill-icon">&#9790;</span>
@@ -124,7 +131,7 @@
     <div id="mapLoadingOverlay" aria-hidden="true">
       <div class="map-loading-card">
         <span class="map-spinner"></span>
-        <span>Carregando visualizacao...</span>
+        <span>Carregando visualização...</span>
       </div>
     </div>
   </div>

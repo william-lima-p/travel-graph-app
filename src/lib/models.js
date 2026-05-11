@@ -8,6 +8,7 @@ const VALID_TRIP_SORTS = new Set([
 ]);
 
 const VALID_THEMES = new Set(['light', 'dark']);
+const VALID_OVERLAY_MODES = new Set(['country', 'region']);
 
 export function createDefaultAppData() {
   return {
@@ -18,6 +19,7 @@ export function createDefaultAppData() {
     preferences: {
       tripSort: DEFAULT_TRIP_SORT,
       visitedOverlayEnabled: false,
+      visitedOverlayMode: 'country',
       theme: 'dark'
     },
     countriesGeoJson: null
@@ -39,6 +41,9 @@ export function normalizeAppDataShape(data) {
         ? data.preferences.tripSort
         : defaults.preferences.tripSort,
       visitedOverlayEnabled: Boolean(data?.preferences?.visitedOverlayEnabled),
+      visitedOverlayMode: VALID_OVERLAY_MODES.has(data?.preferences?.visitedOverlayMode)
+        ? data.preferences.visitedOverlayMode
+        : defaults.preferences.visitedOverlayMode,
       theme: VALID_THEMES.has(data?.preferences?.theme)
         ? data.preferences.theme
         : defaults.preferences.theme
@@ -55,6 +60,7 @@ export function createSerializableAppData({
   collapsedCountries,
   tripSort,
   visitedOverlayEnabled,
+  visitedOverlayMode,
   theme,
   countriesGeoJson
 }) {
@@ -65,6 +71,7 @@ export function createSerializableAppData({
     preferences: {
       tripSort,
       visitedOverlayEnabled,
+      visitedOverlayMode,
       theme
     },
     countriesGeoJson

@@ -86,6 +86,7 @@ export async function startApp() {
   let selectedTripIndex = null;
   let tripSort = initialData.preferences.tripSort || DEFAULT_TRIP_SORT;
   let visitedOverlayEnabled = Boolean(initialData.preferences.visitedOverlayEnabled);
+  let visitedOverlayMode = initialData.preferences.visitedOverlayMode || 'country';
   let theme = initialData.preferences.theme || 'light';
   let tripEditorCollapsed = true;
   let visitedCountriesLayer = null;
@@ -96,6 +97,7 @@ export async function startApp() {
   let pendingSaveCount = 0;
   let deferredPersistTimer = null;
   let mapOverlayLoadCount = 0;
+  const regionGeoJsonCache = new Map();
 
   const locationService = createLocationService({
     loadWorldGeoJson,
@@ -158,10 +160,18 @@ export async function startApp() {
     schedulePersistAppData('Tema salvo em data/app-data.json');
   };
   syncVisitedOverlayButton();
+  syncVisitedOverlayModeButton();
   dom.visitedOverlayToggleBtn.onclick = async () => {
     visitedOverlayEnabled = !visitedOverlayEnabled;
     syncVisitedOverlayButton();
     await persistAppData('Preferencia da camada salva em data/app-data.json');
+    await refreshVisitedCountriesLayer();
+  };
+  dom.visitedOverlayModeToggleBtn.onclick = async () => {
+    visitedOverlayMode = visitedOverlayMode === 'region' ? 'country' : 'region';
+    syncVisitedOverlayModeButton();
+    syncVisitedOverlayButton();
+    await persistAppData('Modo da camada salvo em data/app-data.json');
     await refreshVisitedCountriesLayer();
   };
   dom.tripsTabBtn.onclick = () => setActiveTab('trips');
@@ -352,7 +362,7 @@ export async function startApp() {
       const li = document.createElement('li');
       const flagMarkup = getFlagMarkup(getTripCountryCodes(trip));
       const dateLabel = formatTripMonth(trip.month);
-      const statusLabel = trip.status === 'completed' ? 'Concluido' : 'Planejado';
+      const statusLabel = trip.status === 'completed' ? 'Concluído' : 'Planejado';
       const tripDistance = Number.isFinite(trip.distance) ? trip.distance : totalDistance(trip.cities || []);
       const tripRating = getTripAverageRating(trip);
       const isExpanded = index === selectedTripIndex;
@@ -699,22 +709,29 @@ export async function startApp() {
     syncMapOverlayLoading();
 
     try {
-    if (!visitedOverlayEnabled) {
-      if (visitedCountriesLayer) {
-        map.removeLayer(visitedCountriesLayer);
-        visitedCountriesLayer = null;
+      if (!visitedOverlayEnabled) {
+        clearVisitedOverlayLayer();
+        setVisitedOverlayStatus('Camada desligada');
+        return;
       }
-      setVisitedOverlayStatus('Camada desligada');
-      return;
-    }
 
+      if (visitedOverlayMode === 'region') {
+        await refreshVisitedRegionsLayer();
+        return;
+      }
+
+      await refreshVisitedCountryLayer();
+    } finally {
+      mapOverlayLoadCount = Math.max(0, mapOverlayLoadCount - 1);
+      syncMapOverlayLoading();
+    }
+  }
+
+  async function refreshVisitedCountryLayer() {
     const visitedCodes = getVisitedCountryCodes();
     const visitedNames = getVisitedCountryNames();
     if (!visitedCodes.size && !visitedNames.size) {
-      if (visitedCountriesLayer) {
-        map.removeLayer(visitedCountriesLayer);
-        visitedCountriesLayer = null;
-      }
+      clearVisitedOverlayLayer();
       setVisitedOverlayStatus('Nenhum pais identificado nas viagens ainda');
       return;
     }
@@ -726,9 +743,7 @@ export async function startApp() {
       return;
     }
 
-    if (visitedCountriesLayer) {
-      map.removeLayer(visitedCountriesLayer);
-    }
+    clearVisitedOverlayLayer();
 
     const matchedCountries = new Set();
     visitedCountriesLayer = L.geoJSON(geoJson, {
@@ -741,12 +756,7 @@ export async function startApp() {
         }
         return matches;
       },
-      style: {
-        color: '#0f766e',
-        weight: 2,
-        fillColor: '#14b8a6',
-        fillOpacity: 0.35
-      },
+      style: getVisitedOverlayStyle(),
       interactive: false
     }).addTo(map);
 
@@ -756,10 +766,59 @@ export async function startApp() {
     }
 
     setVisitedOverlayStatus(`${matchedCountries.size} pais(es) destacados no mapa`);
-    } finally {
-      mapOverlayLoadCount = Math.max(0, mapOverlayLoadCount - 1);
-      syncMapOverlayLoading();
+  }
+
+  async function refreshVisitedRegionsLayer() {
+    const visitedCities = getVisitedCompletedCities();
+    if (!visitedCities.length) {
+      clearVisitedOverlayLayer();
+      setVisitedOverlayStatus('Nenhuma cidade concluída com região identificável ainda');
+      return;
     }
+
+    const regionEntries = getVisitedRegionEntries(visitedCities);
+    if (!regionEntries.length) {
+      clearVisitedOverlayLayer();
+      setVisitedOverlayStatus('Nenhuma região identificada nas viagens ainda');
+      return;
+    }
+
+    setVisitedOverlayStatus(`Carregando ${regionEntries.length} região(ões)...`);
+
+    const matchedRegionKeys = new Set();
+    const matchedFeatures = [];
+
+    for (const entry of regionEntries) {
+      const feature = await loadRegionFeatureForEntry(entry);
+      if (!feature?.geometry) {
+        continue;
+      }
+
+      const regionKey = `${entry.countryCode}:${entry.regionKey}`;
+      if (matchedRegionKeys.has(regionKey)) {
+        continue;
+      }
+
+      matchedRegionKeys.add(regionKey);
+      matchedFeatures.push(feature);
+    }
+
+    clearVisitedOverlayLayer();
+
+    if (!matchedFeatures.length) {
+      setVisitedOverlayStatus('Não foi possível identificar regiões visitadas com os contornos disponíveis');
+      return;
+    }
+
+    visitedCountriesLayer = L.geoJSON({
+      type: 'FeatureCollection',
+      features: matchedFeatures
+    }, {
+      style: getVisitedOverlayStyle(),
+      interactive: false
+    }).addTo(map);
+
+    setVisitedOverlayStatus(`${matchedRegionKeys.size} região(ões) destacada(s) no mapa`);
   }
 
   function getVisitedCountryCodes() {
@@ -831,6 +890,172 @@ export async function startApp() {
     }
 
     return null;
+  }
+
+  function clearVisitedOverlayLayer() {
+    if (!visitedCountriesLayer) {
+      return;
+    }
+
+    map.removeLayer(visitedCountriesLayer);
+    visitedCountriesLayer = null;
+  }
+
+  function getVisitedOverlayStyle() {
+    return {
+      color: '#0f766e',
+      weight: 1,
+      opacity: 0.55,
+      lineJoin: 'round',
+      fillColor: '#14b8a6',
+      fillOpacity: 0.35
+    };
+  }
+
+  function getVisitedCompletedCities() {
+    return trips
+      .filter((trip) => trip.status === 'completed')
+      .flatMap((trip) => trip.cities || [])
+      .filter((city) => Number.isFinite(city?.lat) && Number.isFinite(city?.lng));
+  }
+
+  function getVisitedRegionEntries(visitedCities) {
+    const regions = new Map();
+
+    visitedCities.forEach((city) => {
+      const regionName = city.regionName?.trim();
+      const cityName = city.cityName?.trim();
+      const countryName = city.country?.trim();
+      const countryCode = city.countryCode ? normalizeOverlayCountryCode(city.countryCode) : '';
+      if ((!regionName && !cityName) || !countryName || !countryCode) {
+        return;
+      }
+
+      const regionKey = normalizeRegionName(regionName || cityName);
+      if (!regionKey) {
+        return;
+      }
+
+      const entryKey = `${countryCode}:${regionKey}`;
+      if (!regions.has(entryKey)) {
+        regions.set(entryKey, {
+          regionName: regionName || null,
+          cityName: cityName || null,
+          countryName,
+          countryCode,
+          regionKey
+        });
+      }
+    });
+
+    return [...regions.values()];
+  }
+
+  async function loadRegionFeatureForEntry(entry) {
+    if (!entry?.regionKey) {
+      return null;
+    }
+
+    const cacheKey = `${entry.countryCode}:${entry.regionKey}`;
+    if (regionGeoJsonCache.has(cacheKey)) {
+      return regionGeoJsonCache.get(cacheKey);
+    }
+
+    const url = new URL('/api/region-geometry', window.location.origin);
+    if (entry.regionName) {
+      url.searchParams.set('region', entry.regionName);
+    }
+    if (entry.cityName) {
+      url.searchParams.set('city', entry.cityName);
+    }
+    url.searchParams.set('country', entry.countryName);
+
+    const feature = await safeFetchJson(url.toString());
+    const normalizedFeature = feature?.geometry ? feature : null;
+    regionGeoJsonCache.set(cacheKey, normalizedFeature);
+    return normalizedFeature;
+  }
+
+  function normalizeRegionName(name) {
+    return normalizeCountryName(name)
+      .replaceAll('estado de ', '')
+      .replaceAll('province of ', '')
+      .replaceAll('provincia de ', '')
+      .replaceAll('provincia del ', '')
+      .replaceAll('region de ', '')
+      .replaceAll('regiao de ', '')
+      .trim();
+  }
+
+  function pointInFeature(lat, lng, feature) {
+    const geometry = feature?.geometry;
+    if (!geometry) {
+      return false;
+    }
+
+    if (geometry.type === 'Polygon') {
+      return pointInPolygon([lng, lat], geometry.coordinates);
+    }
+
+    if (geometry.type === 'MultiPolygon') {
+      return geometry.coordinates.some((polygon) => pointInPolygon([lng, lat], polygon));
+    }
+
+    return false;
+  }
+
+  function pointInPolygon(point, polygonRings) {
+    if (!polygonRings?.length) {
+      return false;
+    }
+
+    if (!pointInRing(point, polygonRings[0])) {
+      return false;
+    }
+
+    for (let index = 1; index < polygonRings.length; index += 1) {
+      if (pointInRing(point, polygonRings[index])) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function pointInRing(point, ring) {
+    let inside = false;
+
+    for (let current = 0, previous = ring.length - 1; current < ring.length; previous = current++) {
+      const [currentX, currentY] = ring[current];
+      const [previousX, previousY] = ring[previous];
+      const intersects =
+        ((currentY > point[1]) !== (previousY > point[1])) &&
+        (point[0] < ((previousX - currentX) * (point[1] - currentY)) / ((previousY - currentY) || Number.EPSILON) + currentX);
+
+      if (intersects) {
+        inside = !inside;
+      }
+    }
+
+    return inside;
+  }
+
+  async function safeFetchJson(url, options) {
+    try {
+      const response = await fetch(url, options);
+      if (!response.ok) {
+        return null;
+      }
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json') || contentType.includes('geo+json')) {
+        return await response.json();
+      }
+
+      const text = await response.text();
+      return text ? JSON.parse(text) : null;
+    } catch {
+      return null;
+    }
   }
 
   function renderVisitedCitiesList() {
@@ -1375,6 +1600,41 @@ export async function startApp() {
   function syncVisitedOverlayButton() {
     dom.visitedOverlayToggleBtn.classList.toggle('active', visitedOverlayEnabled);
     dom.visitedOverlayToggleBtn.setAttribute('aria-pressed', String(visitedOverlayEnabled));
+    dom.visitedOverlayToggleBtn.title = visitedOverlayMode === 'region'
+      ? 'Visualizar regioes visitadas'
+      : 'Visualizar paises visitados';
+    dom.visitedOverlayModeToggleBtn.disabled = !visitedOverlayEnabled;
+    dom.visitedOverlayModeToggleBtn.classList.toggle('is-subitem-disabled', !visitedOverlayEnabled);
+  }
+
+  function syncVisitedOverlayModeButton() {
+    const showingRegions = visitedOverlayMode === 'region';
+    dom.visitedOverlayModeToggleBtn.classList.toggle('active', showingRegions);
+    dom.visitedOverlayModeToggleBtn.setAttribute('aria-pressed', String(showingRegions));
+    dom.visitedOverlayModeToggleBtn.querySelector('.overlay-pill-label').textContent = showingRegions ? 'Regiões' : 'Países';
+    dom.visitedOverlayModeToggleBtn.querySelector('.overlay-pill-icon').innerHTML = getOverlayModeIconMarkup(showingRegions);
+    dom.visitedOverlayModeToggleBtn.title = showingRegions
+      ? 'Visualização por regiões, como São Paulo'
+      : 'Visualização por países, como Brasil';
+  }
+
+  function getOverlayModeIconMarkup(showingRegions) {
+    if (showingRegions) {
+      return `
+        <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
+          <path fill="currentColor" d="M8 1.5a4 4 0 0 0-4 4c0 3 4 8.5 4 8.5s4-5.5 4-8.5a4 4 0 0 0-4-4Zm0 5.6a1.6 1.6 0 1 1 0-3.2 1.6 1.6 0 0 1 0 3.2Z"/>
+        </svg>
+      `;
+    }
+
+    return `
+      <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">
+        <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M3.5 4.5h9v7h-9z" fill="currentColor" opacity="0.14"/>
+        <path d="M4.4 8 8 5.2 11.6 8 8 10.8Z" fill="currentColor"/>
+        <circle cx="8" cy="8" r="1.2" fill="white"/>
+      </svg>
+    `;
   }
 
   function setTripEditorCollapsed(collapsed) {
@@ -1454,6 +1714,7 @@ export async function startApp() {
   function setVisitedOverlayStatus(message) {
     dom.visitedOverlayStatusEl.textContent = message;
     syncVisitedOverlayButton();
+    syncVisitedOverlayModeButton();
   }
 
   function syncCountriesFileStatus(message) {
@@ -1563,6 +1824,7 @@ export async function startApp() {
       collapsedCountries,
       tripSort,
       visitedOverlayEnabled,
+      visitedOverlayMode,
       theme,
       countriesGeoJson: worldGeoJsonCache
     });
@@ -1612,13 +1874,16 @@ export async function startApp() {
     replaceObject(collapsedCountries, nextData.collapsedCountries);
     tripSort = nextData.preferences.tripSort || DEFAULT_TRIP_SORT;
     visitedOverlayEnabled = Boolean(nextData.preferences.visitedOverlayEnabled);
+    visitedOverlayMode = nextData.preferences.visitedOverlayMode || 'country';
     theme = nextData.preferences.theme || 'light';
     worldGeoJsonCache = nextData.countriesGeoJson || null;
     locationService.clearCache();
+    regionGeoJsonCache.clear();
 
     dom.tripSortInput.value = tripSort;
     applyTheme();
     syncVisitedOverlayButton();
+    syncVisitedOverlayModeButton();
     syncCountriesFileStatus(
       worldGeoJsonCache
         ? 'Mapa de paises salvo em data/app-data.json'
@@ -1668,6 +1933,7 @@ function getDomRefs() {
     saveTripBtn: document.getElementById('saveTrip'),
     clearGraphBtn: document.getElementById('clearGraph'),
     visitedOverlayToggleBtn: document.getElementById('visitedOverlayToggle'),
+    visitedOverlayModeToggleBtn: document.getElementById('visitedOverlayModeToggle'),
     themeToggleBtn: document.getElementById('themeToggle'),
     visitedOverlayStatusEl: document.getElementById('visitedOverlayStatus'),
     tripsTabBtn: document.getElementById('tripsTabBtn'),

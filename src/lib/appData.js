@@ -116,6 +116,7 @@ export async function readLegacyBrowserData() {
   const collapsedCountries = parseJson(localStorage.getItem('collapsedCountries'), {});
   const tripSort = localStorage.getItem('tripSort') || defaults.preferences.tripSort;
   const visitedOverlayEnabled = localStorage.getItem('visitedOverlay') === 'true';
+  const visitedOverlayMode = localStorage.getItem('visitedOverlayMode') || defaults.preferences.visitedOverlayMode;
   const countriesGeoJson = await loadLegacyStoredCountriesGeoJson();
 
   return normalizeAppDataShape({
@@ -124,7 +125,8 @@ export async function readLegacyBrowserData() {
     collapsedCountries,
     preferences: {
       tripSort,
-      visitedOverlayEnabled
+      visitedOverlayEnabled,
+      visitedOverlayMode
     },
     countriesGeoJson
   });

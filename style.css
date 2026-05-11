@@ -248,6 +248,64 @@
   background: #38bdf8;
 }
 
+.mode-pill {
+  position: relative;
+  min-width: 96px;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #cbd5e1;
+  color: #0f172a;
+  transition: background 0.2s ease, color 0.2s ease;
+  margin-left: 0;
+}
+
+.mode-pill::after {
+  content: "";
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.mode-pill .overlay-pill-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mode-pill .overlay-pill-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.mode-pill .overlay-pill-label {
+  font-size: 12px;
+}
+
+.mode-pill.active {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.mode-pill.active::after {
+  transform: none;
+  background: #38bdf8;
+}
+
+.mode-pill.is-subitem-disabled {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -972,6 +1030,14 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.overlay-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
 }
 
 body[data-theme='dark'] {
@@ -1029,7 +1095,17 @@ body[data-theme='dark'] .theme-pill {
   color: #e2e8f0;
 }
 
+body[data-theme='dark'] .mode-pill {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
 body[data-theme='dark'] .theme-pill.active {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+body[data-theme='dark'] .mode-pill.active {
   background: #e2e8f0;
   color: #0f172a;
 }
@@ -1038,7 +1114,15 @@ body[data-theme='dark'] .theme-pill::after {
   background: #f8fafc;
 }
 
+body[data-theme='dark'] .mode-pill::after {
+  background: #f8fafc;
+}
+
 body[data-theme='dark'] .theme-pill.active::after {
+  background: #0f172a;
+}
+
+body[data-theme='dark'] .mode-pill.active::after {
   background: #0f172a;
 }
 
