@@ -82,11 +82,15 @@ export function normalizeTripRecord(trip) {
   const cities = Array.isArray(trip?.cities)
     ? trip.cities.map((city) => normalizeCity(city))
     : [];
+  const status = trip?.status === 'completed' ? 'completed' : 'planned';
+  const month = status === 'completed' && typeof trip?.month === 'string' && /^\d{4}-\d{2}$/.test(trip.month)
+    ? trip.month
+    : '';
 
   return {
     name: typeof trip?.name === 'string' ? trip.name : '',
-    month: typeof trip?.month === 'string' && /^\d{4}-\d{2}$/.test(trip.month) ? trip.month : '',
-    status: trip?.status === 'completed' ? 'completed' : 'planned',
+    month,
+    status,
     createdAt: Number.isFinite(trip?.createdAt) ? trip.createdAt : Date.now(),
     cities,
     distance: Number.isFinite(trip?.distance) ? trip.distance : totalDistance(cities)

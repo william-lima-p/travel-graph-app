@@ -93,6 +93,7 @@ export async function startApp() {
   let activeTab = 'trips';
   let worldGeoJsonCache = initialData.countriesGeoJson || null;
   let editingTripIndex = null;
+  let savingEditedTrip = false;
   let renamingVisitedCityId = null;
   let pendingSaveCount = 0;
   let deferredPersistTimer = null;
@@ -134,8 +135,8 @@ export async function startApp() {
   dom.exportDataBtn.onclick = handleAppDataExport;
   dom.saveTripBtn.onclick = handleSaveTrip;
   dom.saveEditTripBtn.onclick = handleSaveEditedTrip;
-  dom.cancelEditTripBtn.onclick = closeEditTripModal;
-  dom.closeEditTripModalBtn.onclick = closeEditTripModal;
+  dom.cancelEditTripBtn.onclick = () => closeEditTripModal();
+  dom.closeEditTripModalBtn.onclick = () => closeEditTripModal();
   dom.newTripBtn.onclick = () => {
     startNewTrip({ openEditor: true });
     renderTrips();
@@ -177,7 +178,7 @@ export async function startApp() {
   dom.tripsTabBtn.onclick = () => setActiveTab('trips');
   dom.citiesTabBtn.onclick = () => setActiveTab('cities');
   dom.editTripModal.onclick = (event) => {
-    if (event.target === dom.editTripModal) {
+    if (!savingEditedTrip && event.target === dom.editTripModal) {
       closeEditTripModal();
     }
   };
@@ -347,7 +348,7 @@ export async function startApp() {
     zoomToCities(map, cities);
     renderTrips();
     renderVisitedCitiesList();
-    void ensureTripLocations(trip, index);
+    void ensureTripLocations(trip, index, { force: trip.status === 'planned' });
   }
 
   function renderTrips() {
@@ -515,8 +516,8 @@ export async function startApp() {
     await syncSelectedTripFromCities();
   }
 
-  async function ensureTripLocations(trip, index) {
-    if (!trip?.cities?.length || trip.cities.every(hasResolvedLocation)) return;
+  async function ensureTripLocations(trip, index, { force = false } = {}) {
+    if (!trip?.cities?.length || (!force && trip.cities.every(hasResolvedLocation))) return;
 
     let changed = false;
     const previousDistance = trip.distance || 0;
@@ -524,7 +525,7 @@ export async function startApp() {
     await Promise.all(
       trip.cities.map(async (city) => {
         const normalized = normalizeCity(city);
-        if (!hasResolvedLocation(normalized)) {
+        if (force || !hasResolvedLocation(normalized)) {
           const resolved = await locationService.reverseGeocodeLocation(normalized.lat, normalized.lng);
           if (resolved) {
             changed = applyResolvedLocation(normalized, resolved) || changed;
@@ -660,6 +661,7 @@ export async function startApp() {
     if (!trip) return;
 
     editingTripIndex = index;
+    setSaveEditTripLoading(false);
     dom.editTripNameInput.value = trip.name || '';
     dom.editTripMonthInput.value = trip.month || '';
     dom.editTripStatusInput.value = trip.status || 'planned';
@@ -668,6 +670,10 @@ export async function startApp() {
   }
 
   function closeEditTripModal() {
+    if (savingEditedTrip) {
+      return;
+    }
+
     editingTripIndex = null;
     dom.editTripModal.classList.remove('open');
     dom.editTripModal.hidden = true;
@@ -682,16 +688,26 @@ export async function startApp() {
     const nextName = dom.editTripNameInput.value.trim();
     if (!nextName) return;
 
-    trip.name = nextName;
-    trip.month = dom.editTripMonthInput.value;
-    trip.status = dom.editTripStatusInput.value;
+    setSaveEditTripLoading(true);
 
-    await persistAppData('Viagem editada em data/app-data.json');
-    closeEditTripModal();
-    updateTripMode();
-    renderTrips();
-    renderVisitedCitiesList();
-    await refreshVisitedCountriesLayer();
+    try {
+      Object.assign(trip, normalizeTripRecord({
+        ...trip,
+        name: nextName,
+        month: dom.editTripMonthInput.value,
+        status: dom.editTripStatusInput.value
+      }));
+
+      await persistAppData('Viagem editada em data/app-data.json');
+      setSaveEditTripLoading(false);
+      closeEditTripModal();
+      updateTripMode();
+      renderTrips();
+      renderVisitedCitiesList();
+      void refreshVisitedCountriesLayer();
+    } finally {
+      setSaveEditTripLoading(false);
+    }
   }
 
   function syncCitiesFromSelectedTrip() {
@@ -728,15 +744,14 @@ export async function startApp() {
   }
 
   async function refreshVisitedCountryLayer() {
-    const visitedCodes = getVisitedCountryCodes();
-    const visitedNames = getVisitedCountryNames();
-    if (!visitedCodes.size && !visitedNames.size) {
+    const countryOverlayTargets = getCountryOverlayTargets();
+    if (!countryOverlayTargets.totalPoints) {
       clearVisitedOverlayLayer();
       setVisitedOverlayStatus('Nenhum pais identificado nas viagens ainda');
       return;
     }
 
-    setVisitedOverlayStatus(`Carregando ${Math.max(visitedCodes.size, visitedNames.size)} pais(es)...`);
+    setVisitedOverlayStatus('Carregando paises...');
     const geoJson = await loadWorldGeoJson();
     if (!geoJson) {
       setVisitedOverlayStatus('Nao foi possivel carregar os contornos dos paises');
@@ -746,61 +761,67 @@ export async function startApp() {
     clearVisitedOverlayLayer();
 
     const matchedCountries = new Set();
+    const matchedCounts = {
+      visited: 0,
+      planned: 0,
+      selected: 0
+    };
     visitedCountriesLayer = L.geoJSON(geoJson, {
       filter: (feature) => {
-        const code = getFeatureCountryCode(feature);
-        const name = getFeatureCountryName(feature);
-        const matches = (code ? visitedCodes.has(code) : false) || (name ? visitedNames.has(name) : false);
-        if (matches) {
-          matchedCountries.add(code || name);
+        const status = getCountryOverlayStatus(feature, countryOverlayTargets);
+        if (status) {
+          const key = getFeatureCountryCode(feature) || getFeatureCountryName(feature);
+          if (key && !matchedCountries.has(key)) {
+            matchedCountries.add(key);
+            matchedCounts[status] += 1;
+          }
         }
-        return matches;
+        return Boolean(status);
       },
-      style: getVisitedOverlayStyle(),
+      style: (feature) => getVisitedOverlayStyle(getCountryOverlayStatus(feature, countryOverlayTargets)),
       interactive: false
     }).addTo(map);
 
     if (!matchedCountries.size) {
-      setVisitedOverlayStatus(`Nenhum poligono encontrado para ${Math.max(visitedCodes.size, visitedNames.size)} pais(es)`);
+      setVisitedOverlayStatus('Nenhum poligono encontrado para os pontos das viagens');
       return;
     }
 
-    setVisitedOverlayStatus(`${matchedCountries.size} pais(es) destacados no mapa`);
+    setVisitedOverlayStatus(`${matchedCountries.size} pais(es) destacados no mapa (${formatOverlayCountSummary(matchedCounts)})`);
   }
 
   async function refreshVisitedRegionsLayer() {
-    const visitedCities = getVisitedCompletedCities();
-    if (!visitedCities.length) {
-      clearVisitedOverlayLayer();
-      setVisitedOverlayStatus('Nenhuma cidade concluída com região identificável ainda');
-      return;
-    }
-
-    const regionEntries = getVisitedRegionEntries(visitedCities);
-    if (!regionEntries.length) {
+    const regionOverlayTargets = getRegionOverlayTargets();
+    if (!regionOverlayTargets.totalCount) {
       clearVisitedOverlayLayer();
       setVisitedOverlayStatus('Nenhuma região identificada nas viagens ainda');
       return;
     }
 
-    setVisitedOverlayStatus(`Carregando ${regionEntries.length} região(ões)...`);
+    setVisitedOverlayStatus(`Carregando ${regionOverlayTargets.totalCount} região(ões)...`);
 
-    const matchedRegionKeys = new Set();
+    const matchedCounts = {
+      visited: 0,
+      planned: 0,
+      selected: 0
+    };
     const matchedFeatures = [];
 
-    for (const entry of regionEntries) {
+    for (const [regionKey, entry] of regionOverlayTargets.entries) {
       const feature = await loadRegionFeatureForEntry(entry);
       if (!feature?.geometry) {
         continue;
       }
 
-      const regionKey = `${entry.countryCode}:${entry.regionKey}`;
-      if (matchedRegionKeys.has(regionKey)) {
-        continue;
-      }
-
-      matchedRegionKeys.add(regionKey);
-      matchedFeatures.push(feature);
+      const status = regionOverlayTargets.statusByKey.get(regionKey) || 'visited';
+      matchedCounts[status] += 1;
+      matchedFeatures.push({
+        ...feature,
+        properties: {
+          ...(feature.properties || {}),
+          __overlayStatus: status
+        }
+      });
     }
 
     clearVisitedOverlayLayer();
@@ -814,39 +835,56 @@ export async function startApp() {
       type: 'FeatureCollection',
       features: matchedFeatures
     }, {
-      style: getVisitedOverlayStyle(),
+      style: (feature) => getVisitedOverlayStyle(feature?.properties?.__overlayStatus),
       interactive: false
     }).addTo(map);
 
-    setVisitedOverlayStatus(`${matchedRegionKeys.size} região(ões) destacada(s) no mapa`);
+    setVisitedOverlayStatus(`${matchedFeatures.length} região(ões) destacada(s) no mapa (${formatOverlayCountSummary(matchedCounts)})`);
   }
 
-  function getVisitedCountryCodes() {
-    const codes = new Set();
-    trips
-      .filter((trip) => trip.status === 'completed')
-      .forEach((trip) => {
-      getTripCountryCodes(trip).forEach((code) => codes.add(normalizeOverlayCountryCode(code)));
-      });
+  function getCountryOverlayTargets() {
+    const completedCities = getOverlayCitiesForTrips(trips.filter((trip) => trip.status === 'completed'));
+    const plannedCities = getOverlayCitiesForTrips(trips.filter((trip) => trip.status === 'planned'));
+    const selectedTrip = getSelectedTrip();
+    const selectedCities = selectedTrip ? getOverlayCitiesForTrips([selectedTrip]) : [];
 
-    return codes;
+    return {
+      completedCities,
+      plannedCities,
+      selectedCities,
+      totalPoints: completedCities.length + plannedCities.length + selectedCities.length
+    };
   }
 
-  function getVisitedCountryNames() {
-    const names = new Set();
+  function getOverlayCitiesForTrips(sourceTrips) {
+    const uniqueCities = new Map();
 
-    trips
-      .filter((trip) => trip.status === 'completed')
-      .forEach((trip) => {
-        (trip.cities || []).forEach((city) => {
-          const canonicalName = getCanonicalCountryName(city);
-          if (canonicalName) {
-            names.add(canonicalName);
-          }
-        });
+    sourceTrips.forEach((trip) => {
+      (trip?.cities || []).forEach((city) => {
+        if (!Number.isFinite(city?.lat) || !Number.isFinite(city?.lng)) {
+          return;
+        }
+
+        uniqueCities.set(`${Number(city.lat).toFixed(4)},${Number(city.lng).toFixed(4)}`, city);
       });
+    });
 
-    return names;
+    return [...uniqueCities.values()];
+  }
+
+  function getCountryOverlayStatus(feature, targets) {
+    const matchesSelected = targets.selectedCities.some((city) => pointInFeature(city.lat, city.lng, feature));
+    if (matchesSelected) {
+      return 'selected';
+    }
+
+    const matchesVisited = targets.completedCities.some((city) => pointInFeature(city.lat, city.lng, feature));
+    if (matchesVisited) {
+      return 'visited';
+    }
+
+    const matchesPlanned = targets.plannedCities.some((city) => pointInFeature(city.lat, city.lng, feature));
+    return matchesPlanned ? 'planned' : null;
   }
 
   async function loadWorldGeoJson() {
@@ -901,28 +939,106 @@ export async function startApp() {
     visitedCountriesLayer = null;
   }
 
-  function getVisitedOverlayStyle() {
+  function getVisitedOverlayStyle(status = 'visited') {
+    const palette = status === 'selected'
+      ? {
+        color: '#b91c1c',
+        fillColor: '#ef4444',
+        weight: 2,
+        opacity: 0.8,
+        fillOpacity: 0.34
+      }
+      : status === 'planned'
+        ? {
+          color: '#ca8a04',
+          fillColor: '#facc15',
+          weight: 1.5,
+          opacity: 0.75,
+          fillOpacity: 0.3
+        }
+        : {
+          color: '#0f766e',
+          fillColor: '#14b8a6',
+          weight: 1,
+          opacity: 0.55,
+          fillOpacity: 0.35
+        };
+
     return {
-      color: '#0f766e',
-      weight: 1,
-      opacity: 0.55,
+      color: palette.color,
+      weight: palette.weight,
+      opacity: palette.opacity,
       lineJoin: 'round',
-      fillColor: '#14b8a6',
-      fillOpacity: 0.35
+      fillColor: palette.fillColor,
+      fillOpacity: palette.fillOpacity
     };
   }
 
-  function getVisitedCompletedCities() {
-    return trips
-      .filter((trip) => trip.status === 'completed')
-      .flatMap((trip) => trip.cities || [])
-      .filter((city) => Number.isFinite(city?.lat) && Number.isFinite(city?.lng));
+  function getSelectedTrip() {
+    if (selectedTripIndex === null) {
+      return null;
+    }
+
+    return trips[selectedTripIndex] || null;
   }
 
-  function getVisitedRegionEntries(visitedCities) {
+  function getRegionOverlayTargets() {
+    const entries = new Map();
+    const statusByKey = new Map();
+
+    const applyEntries = (tripEntries, status) => {
+      tripEntries.forEach((entry, key) => {
+        entries.set(key, entry);
+        const currentStatus = statusByKey.get(key);
+        if (getOverlayStatusPriority(status) >= getOverlayStatusPriority(currentStatus)) {
+          statusByKey.set(key, status);
+        }
+      });
+    };
+
+    applyEntries(getRegionEntriesForTrips(trips.filter((trip) => trip.status === 'planned')), 'planned');
+    applyEntries(getRegionEntriesForTrips(trips.filter((trip) => trip.status === 'completed')), 'visited');
+
+    const selectedTrip = getSelectedTrip();
+    if (selectedTrip) {
+      applyEntries(getRegionEntriesForTrips([selectedTrip]), 'selected');
+    }
+
+    return {
+      entries,
+      statusByKey,
+      totalCount: entries.size
+    };
+  }
+
+  function getOverlayStatusPriority(status) {
+    if (status === 'selected') {
+      return 3;
+    }
+
+    if (status === 'visited') {
+      return 2;
+    }
+
+    if (status === 'planned') {
+      return 1;
+    }
+
+    return 0;
+  }
+
+  function getRegionEntriesForTrips(sourceTrips) {
+    const tripCities = sourceTrips
+      .flatMap((trip) => trip.cities || [])
+      .filter((city) => Number.isFinite(city?.lat) && Number.isFinite(city?.lng));
+
+    return getRegionEntriesFromCities(tripCities);
+  }
+
+  function getRegionEntriesFromCities(sourceCities) {
     const regions = new Map();
 
-    visitedCities.forEach((city) => {
+    sourceCities.forEach((city) => {
       const regionName = city.regionName?.trim();
       const cityName = city.cityName?.trim();
       const countryName = city.country?.trim();
@@ -948,7 +1064,25 @@ export async function startApp() {
       }
     });
 
-    return [...regions.values()];
+    return regions;
+  }
+
+  function formatOverlayCountSummary(counts) {
+    const parts = [];
+
+    if (counts.visited) {
+      parts.push(`${counts.visited} visitado(s)`);
+    }
+
+    if (counts.planned) {
+      parts.push(`${counts.planned} planejado(s)`);
+    }
+
+    if (counts.selected) {
+      parts.push(`${counts.selected} selecionado(s)`);
+    }
+
+    return parts.join(', ') || 'sem destaque';
   }
 
   async function loadRegionFeatureForEntry(entry) {
@@ -1902,6 +2036,18 @@ export async function startApp() {
     dom.saveTripBtn.disabled = isLoading;
     dom.saveTripBtn.classList.toggle('is-loading', isLoading);
     dom.saveTripBtn.textContent = isLoading ? 'Salvando...' : 'Salvar';
+  }
+
+  function setSaveEditTripLoading(isLoading) {
+    savingEditedTrip = isLoading;
+    dom.saveEditTripBtn.disabled = isLoading;
+    dom.cancelEditTripBtn.disabled = isLoading;
+    dom.closeEditTripModalBtn.disabled = isLoading;
+    dom.editTripNameInput.disabled = isLoading;
+    dom.editTripMonthInput.disabled = isLoading;
+    dom.editTripStatusInput.disabled = isLoading;
+    dom.saveEditTripBtn.classList.toggle('is-loading', isLoading);
+    dom.saveEditTripBtn.textContent = isLoading ? 'Salvando...' : 'Salvar edição';
   }
 
   function syncSavingIndicator() {
