@@ -111,10 +111,7 @@
         <div class="action-row">
           <button id="importDataBtn" class="btn secondary" type="button">Importar dados</button>
           <button id="exportDataBtn" class="btn secondary" type="button">Baixar dados</button>
-          <button id="importCountriesBtn" class="btn secondary import-countries-btn" type="button" aria-label="Importar paises" title="Importar paises">↥</button>
         </div>
-        <input id="countriesFileInput" type="file" accept=".geojson,application/geo+json,application/json" hidden />
-        <small id="countriesFileStatus" class="sr-only">Usando busca online para identificar paises</small>
         <input id="appDataFileInput" type="file" accept=".json,application/json" hidden />
         <small id="appDataStatus">Dados sincronizados com data/app-data.json</small>
       </div>
@@ -122,8 +119,8 @@
       <label class="field">
         <span>Ordenar viagens</span>
         <select id="tripSort">
-          <option value="date-desc">Mais recentes</option>
           <option value="date-asc">Mais antigas</option>
+          <option value="date-desc">Mais recentes</option>
           <option value="name-asc">Nome (A-Z)</option>
           <option value="status">Status</option>
         </select>

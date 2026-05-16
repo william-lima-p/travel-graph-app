@@ -1,4 +1,4 @@
-export const DEFAULT_TRIP_SORT = 'date-desc';
+export const DEFAULT_TRIP_SORT = 'date-asc';
 
 const VALID_TRIP_SORTS = new Set([
   'date-desc',
@@ -83,7 +83,7 @@ export function normalizeTripRecord(trip) {
     ? trip.cities.map((city) => normalizeCity(city))
     : [];
   const status = trip?.status === 'completed' ? 'completed' : 'planned';
-  const month = status === 'completed' && typeof trip?.month === 'string' && /^\d{4}-\d{2}$/.test(trip.month)
+  const month = typeof trip?.month === 'string' && /^\d{4}-\d{2}$/.test(trip.month)
     ? trip.month
     : '';
 

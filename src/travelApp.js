@@ -91,7 +91,7 @@ export async function startApp() {
   let tripEditorCollapsed = true;
   let visitedCountriesLayer = null;
   let activeTab = 'trips';
-  let worldGeoJsonCache = initialData.countriesGeoJson || null;
+  let worldGeoJsonCache = null;
   let editingTripIndex = null;
   let savingEditedTrip = false;
   let renamingVisitedCityId = null;
@@ -107,11 +107,6 @@ export async function startApp() {
 
   const migratedLegacyRatings = migrateLegacyCityRatings();
 
-  syncCountriesFileStatus(
-    worldGeoJsonCache
-      ? 'Mapa de paises salvo em data/app-data.json'
-      : 'Usando busca online para identificar paises'
-  );
   syncAppDataStatus(
     initialLoadError
       ? 'Falha ao carregar os dados iniciais. A interface foi aberta em modo vazio.'
@@ -128,8 +123,6 @@ export async function startApp() {
       : 'Dados sincronizados com data/app-data.json'
   );
 
-  dom.importCountriesBtn.onclick = () => dom.countriesFileInput.click();
-  dom.countriesFileInput.onchange = handleCountriesImport;
   dom.importDataBtn.onclick = () => dom.appDataFileInput.click();
   dom.appDataFileInput.onchange = handleAppDataImport;
   dom.exportDataBtn.onclick = handleAppDataExport;
@@ -204,38 +197,6 @@ export async function startApp() {
   await hydrateCompletedTrips();
   if (migratedLegacyRatings) {
     schedulePersistAppData('Notas antigas recuperadas em data/app-data.json', 0);
-  }
-
-  async function handleCountriesImport(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    syncCountriesFileStatus('Importando mapa de paises...');
-
-    try {
-      const geoJson = JSON.parse(await file.text());
-      if (!geoJson?.features?.length) {
-        throw new Error('Arquivo invalido');
-      }
-
-      worldGeoJsonCache = geoJson;
-      locationService.clearCache();
-      await persistAppData(`Mapa local carregado: ${file.name}`);
-
-      if (selectedTripIndex !== null) {
-        await ensureTripLocations(trips[selectedTripIndex], selectedTripIndex);
-      }
-
-      await hydrateCompletedTrips();
-      renderTrips();
-      renderVisitedCitiesList();
-      await refreshVisitedCountriesLayer();
-      syncCountriesFileStatus(`Mapa local carregado: ${file.name}`);
-    } catch {
-      syncCountriesFileStatus('Falha ao importar o arquivo de paises');
-    } finally {
-      dom.countriesFileInput.value = '';
-    }
   }
 
   async function handleAppDataImport(event) {
@@ -900,7 +861,6 @@ export async function startApp() {
         const geoJson = await response.json();
         if (!geoJson?.features?.length) continue;
         worldGeoJsonCache = geoJson;
-        syncCountriesFileStatus('Mapa local countries.geojson encontrado no projeto');
         return geoJson;
       } catch {
         continue;
@@ -920,7 +880,6 @@ export async function startApp() {
         const geoJson = await response.json();
         if (!geoJson?.features?.length) continue;
         worldGeoJsonCache = geoJson;
-        syncCountriesFileStatus('Mapa de paises carregado online');
         return geoJson;
       } catch {
         continue;
@@ -1851,12 +1810,6 @@ export async function startApp() {
     syncVisitedOverlayModeButton();
   }
 
-  function syncCountriesFileStatus(message) {
-    dom.countriesFileStatusEl.textContent = message;
-    dom.importCountriesBtn.title = message;
-    dom.importCountriesBtn.setAttribute('aria-label', message);
-  }
-
   function syncAppDataStatus(message) {
     dom.appDataStatusEl.textContent = message;
   }
@@ -1959,8 +1912,7 @@ export async function startApp() {
       tripSort,
       visitedOverlayEnabled,
       visitedOverlayMode,
-      theme,
-      countriesGeoJson: worldGeoJsonCache
+      theme
     });
   }
 
@@ -2010,7 +1962,7 @@ export async function startApp() {
     visitedOverlayEnabled = Boolean(nextData.preferences.visitedOverlayEnabled);
     visitedOverlayMode = nextData.preferences.visitedOverlayMode || 'country';
     theme = nextData.preferences.theme || 'light';
-    worldGeoJsonCache = nextData.countriesGeoJson || null;
+    worldGeoJsonCache = null;
     locationService.clearCache();
     regionGeoJsonCache.clear();
 
@@ -2018,12 +1970,6 @@ export async function startApp() {
     applyTheme();
     syncVisitedOverlayButton();
     syncVisitedOverlayModeButton();
-    syncCountriesFileStatus(
-      worldGeoJsonCache
-        ? 'Mapa de paises salvo em data/app-data.json'
-        : 'Usando busca online para identificar paises'
-    );
-
     startNewTrip();
     setActiveTab(activeTab);
     renderTrips();
@@ -2086,9 +2032,6 @@ function getDomRefs() {
     citiesTabBtn: document.getElementById('citiesTabBtn'),
     tripsTabEl: document.getElementById('tripsTab'),
     citiesTabEl: document.getElementById('citiesTab'),
-    importCountriesBtn: document.getElementById('importCountriesBtn'),
-    countriesFileInput: document.getElementById('countriesFileInput'),
-    countriesFileStatusEl: document.getElementById('countriesFileStatus'),
     importDataBtn: document.getElementById('importDataBtn'),
     exportDataBtn: document.getElementById('exportDataBtn'),
     appDataFileInput: document.getElementById('appDataFileInput'),
