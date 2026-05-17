@@ -1700,11 +1700,16 @@ export async function startApp() {
       return directKey;
     }
 
-    return findClosestCityRatingKey({
+    const closestKey = findClosestCityRatingKey({
       countryCode: cityOrId.countryCode?.toLowerCase() || 'xx',
       lat: Number(cityOrId.lat),
       lng: Number(cityOrId.lng)
     }, 1.2);
+    if (closestKey) {
+      return closestKey;
+    }
+
+    return findRelatedCompletedCityRatingKey(cityOrId);
   }
 
   function findClosestCityRatingKey(target, maxDistanceKm = 25) {
@@ -1736,6 +1741,72 @@ export async function startApp() {
         bestKey = key;
       }
     });
+
+    return bestKey;
+  }
+
+  function findRelatedCompletedCityRatingKey(targetCity, maxDistanceKm = CITY_PROXIMITY_KM) {
+    if (!Number.isFinite(targetCity?.lat) || !Number.isFinite(targetCity?.lng)) {
+      return null;
+    }
+
+    const targetLabel = normalizeTripCityLabel(getDisplayCityName(targetCity));
+    if (!targetLabel) {
+      return null;
+    }
+
+    const targetCountryCode = targetCity.countryCode?.toLowerCase() || 'xx';
+    let bestKey = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    let bestLabelStrength = -1;
+
+    trips
+      .filter((trip) => trip.status === 'completed')
+      .forEach((trip) => {
+        (trip.cities || []).forEach((city, index) => {
+          const candidateKey = createVisitedCityId(city);
+          if (!cityRatings[candidateKey]) {
+            return;
+          }
+
+          const candidateCountryCode = city.countryCode?.toLowerCase() || 'xx';
+          const sameCountry =
+            candidateCountryCode === targetCountryCode ||
+            candidateCountryCode === 'xx' ||
+            targetCountryCode === 'xx';
+
+          if (!sameCountry) {
+            return;
+          }
+
+          const distance = distanceBetweenPointsKm(targetCity.lat, targetCity.lng, city.lat, city.lng);
+          if (distance > maxDistanceKm) {
+            return;
+          }
+
+          const customLabel = normalizeTripCityLabel(cityRatings[candidateKey]?.customName || '');
+          const defaultLabel = normalizeTripCityLabel(getDisplayCityName(city, index));
+          const isExactMatch = customLabel === targetLabel || defaultLabel === targetLabel;
+          const isSimilarMatch = !isExactMatch && (
+            areSimilarTripCityLabels(customLabel, targetLabel) ||
+            areSimilarTripCityLabels(defaultLabel, targetLabel)
+          );
+
+          if (!isExactMatch && !isSimilarMatch) {
+            return;
+          }
+
+          const labelStrength = isExactMatch ? 2 : 1;
+          if (
+            labelStrength > bestLabelStrength ||
+            (labelStrength === bestLabelStrength && distance < bestDistance)
+          ) {
+            bestKey = candidateKey;
+            bestDistance = distance;
+            bestLabelStrength = labelStrength;
+          }
+        });
+      });
 
     return bestKey;
   }
